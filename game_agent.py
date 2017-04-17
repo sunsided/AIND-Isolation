@@ -145,21 +145,29 @@ class CustomPlayer:
         # TODO: Initializations, opening moves, etc.
         # TODO: Depending on the choice of the opponent, we can remove parts of the previously built tree and clean dictionaries (hash collision -> linear search). Can we use the game round?
 
-        position = None
+        best_value, best_move = NEGATIVE_INFINITY, None
         try:
             # The search method call (alpha beta or minimax) should happen in
             # here in order to avoid timeout. The try/except block will
             # automatically catch the exception raised by the search method
             # when the timer gets close to expiring
-            _, position = self.search(game, depth=self.search_depth, maximizing_player=True)
+
+            if self.iterative:
+                depth = 0
+                while True:
+                    depth += 1
+                    v, m = self.search(game, depth=depth, maximizing_player=True)
+                    if v > best_value:
+                        best_value, best_move = v, m
+            else:
+                best_value, best_move = self.search(game, depth=self.search_depth, maximizing_player=True)
 
         except Timeout:
             # Handle any actions required at timeout, if necessary
             pass
 
         # Return the best move from the last completed search iteration
-        assert position is not None
-        return position
+        return best_move
 
     def terminal_score(self, game: Board, depth: int) -> Optional[float]:
         """
