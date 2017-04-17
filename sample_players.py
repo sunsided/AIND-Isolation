@@ -96,7 +96,7 @@ def improved_score(game, player):
     return float(own_moves - opp_moves)
 
 
-class RandomPlayer():
+class RandomPlayer:
     """Player that chooses a move randomly."""
 
     def get_move(self, game, legal_moves, time_left):

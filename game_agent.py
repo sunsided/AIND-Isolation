@@ -35,6 +35,10 @@ def custom_score(game: Board, player: Any) -> float:
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
+    This is the "improved" evaluation function discussed in lecture that outputs a
+    score equal to the difference in the number of moves available to the
+    two players.
+
     Parameters
     ----------
     game : `isolation.Board`
@@ -51,8 +55,15 @@ def custom_score(game: Board, player: Any) -> float:
         The heuristic value of the current game state to the specified player.
     """
 
-    # TODO: finish this function!
-    raise NotImplementedError
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    own_moves = len(game.get_legal_moves(player))
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    return float(own_moves - opp_moves)
 
 
 class CustomPlayer:
@@ -136,8 +147,6 @@ class CustomPlayer:
         """
 
         self.time_left = time_left
-
-        # TODO: finish this function!
 
         # Perform any required initializations, including selecting an initial
         # move from the game board (i.e., an opening book), or returning
