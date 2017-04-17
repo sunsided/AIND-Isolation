@@ -241,7 +241,7 @@ if __name__ == "__main__":
     print(game.to_string())
 
     # players take turns moving on the board, so player1 should be next to move
-    assert(player1 == game.active_player)
+    assert (player1 == game.active_player)
 
     # get a list of the legal moves available to the active player
     print(game.get_legal_moves())
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     # applying a move. Notice that this does NOT change the calling object
     # (unlike .apply_move()).
     new_game = game.forecast_move((1, 1))
-    assert(new_game.to_string() != game.to_string())
+    assert (new_game.to_string() != game.to_string())
     print("\nOld state:\n{}".format(game.to_string()))
     print("\nNew state:\n{}".format(new_game.to_string()))
 

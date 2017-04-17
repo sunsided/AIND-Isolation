@@ -7,21 +7,20 @@ interface, but cannot be automatically assessed for correctness.
 STUDENTS SHOULD NOT NEED TO MODIFY THIS CODE.  IT WOULD BE BEST TO TREAT THIS
 FILE AS A BLACK BOX FOR TESTING.
 """
-import unittest
-import timeit
 import sys
-
-import isolation
-import game_agent
-
+import timeit
+import unittest
 from collections import Counter
 from copy import copy
 from functools import wraps
-from queue import Queue
-from threading import Thread
+from importlib import reload
 from multiprocessing import TimeoutError
 from queue import Empty as QueueEmptyError
-from importlib import reload
+from queue import Queue
+from threading import Thread
+
+import game_agent
+import isolation
 
 TIMEOUT = 60
 
@@ -222,7 +221,6 @@ class CounterBoard(isolation.Board):
 
 
 class Project1Test(unittest.TestCase):
-
     def initAUT(self, depth, eval_fn, iterative=False,
                 method="minimax", loc1=(3, 3), loc2=(0, 0), w=7, h=7):
         """Generate and initialize player and board objects to be used for
@@ -248,7 +246,7 @@ class Project1Test(unittest.TestCase):
         game.apply_move(p2_location)
 
         self.assertIsInstance(game_agent.custom_score(game, player1), float,
-            "The heuristic function should return a floating point")
+                              "The heuristic function should return a floating point")
 
     @timeout(TIMEOUT)
     # @unittest.skip("Skip simple minimax test.")  # Uncomment this line to skip test
@@ -502,6 +500,7 @@ class Project1Test(unittest.TestCase):
             when an event occurs, regardless of the clock time required until
             the event happens.
             """
+
             def __init__(self, time_limit):
                 self.time_limit = time_limit
                 self.invoked = False
@@ -522,7 +521,6 @@ class Project1Test(unittest.TestCase):
         exact_counts = [(8, 8), (32, 10), (160, 39), (603, 35), (1861, 54), (3912, 62)]
 
         for idx in range(len(origins)):
-
             # set the initial timer high enough that the search will not
             # timeout before triggering the dynamic timer to halt by visiting
             # the expected number of nodes
