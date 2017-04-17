@@ -66,6 +66,72 @@ def custom_score(game: Board, player: Any) -> float:
     return float(own_moves - opp_moves)
 
 
+class TreeNode:
+    _registry = {}
+
+    @staticmethod
+    def find_node(branch: Board) -> Optional['TreeNode']:
+        return TreeNode._registry[branch] if branch in TreeNode._registry else None
+
+    def __init__(self, parent: Optional['TreeNode'], move: Optional[Position], branch: Board):
+        self._parent = parent
+        self._children = []
+        self._branch = branch
+        self._move = move
+        TreeNode._registry[branch] = self
+
+    def __del__(self):
+        for child in self.children:
+            del child
+        if self.parent is not None:
+            del self._parent
+        del TreeNode._registry[self.branch]
+        self._branch = None
+        self._move = None
+
+    def __hash__(self):
+        return self._branch.hash()
+
+    def add_childs(self, children: Iterable['TreeNode']):
+        for child in children:
+            self._children.append(child)
+
+    def forget_child(self, child: 'TreeNode'):
+        self._children.remove(child)
+
+    @property
+    def parent(self) -> Optional['TreeNode']:
+        return self._parent
+
+    @property
+    def children(self) -> Iterable['TreeNode']:
+        return self._children
+
+    @property
+    def has_children(self) -> bool:
+        return any(self._children)
+
+    @property
+    def siblings(self) -> Iterable['TreeNode']:
+        if self._parent is None:
+            return []
+        return (child for child in self._parent.children if child is not self)
+
+    @property
+    def branch(self) -> Optional[Board]:
+        return self._branch
+
+    @property
+    def move(self) -> Optional[Position]:
+        return self._move
+
+    def make_root(self):
+        if self.parent is not None:
+            self.parent.forget_child(self)
+        for sibling in self.siblings:
+            del sibling
+
+
 class CustomPlayer:
     """Game-playing agent that chooses a move using your evaluation function
     and a depth-limited minimax algorithm with alpha-beta pruning. You must
@@ -105,6 +171,7 @@ class CustomPlayer:
         self.time_left = None
         self.TIMER_THRESHOLD = timeout
         self.method = method
+        self.tree = None  # type: Optional[TreeNode]
 
         self.search = self.minimax if method == 'minimax' else self.alphabeta
         assert method == 'minimax' or method == 'alphabeta', \
@@ -156,6 +223,9 @@ class CustomPlayer:
 
         best_value, best_move = NEGATIVE_INFINITY, None
         depth = 0
+
+        if self.tree is None:
+            self.tree = TreeNode(None, None, game)
 
         try:
             # The search method call (alpha beta or minimax) should happen in
@@ -245,7 +315,15 @@ class CustomPlayer:
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
-        for move, branch in self.move_branches(game):
+        root = TreeNode.find_node(game) or TreeNode(None, None, game)
+        if not root.has_children:
+            root.add_childs((TreeNode(root, move, game.forecast_move(move)) for move in game.get_legal_moves()))
+
+        # TODO: Move is not a property of a child, but of an edge TO the child. Otherwise different parents couldn't refer to the same game state.
+        # TODO: Beware circular cleanups if a node reuses a different node's parent. Maybe track all parents and purge DOWN only if all parents are gone?
+
+        for node in root.children:
+            move, branch = node.move, node.branch
             v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
             if maximizing_player:
                 if v > best_value:
