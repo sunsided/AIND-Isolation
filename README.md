@@ -1,5 +1,4 @@
-
-# Build a Game-playing Agent
+# Build a Game-playing Agent for Isolation
 
 ![Example game of isolation](viz.gif)
 
@@ -72,17 +71,17 @@ You may write or modify code within each file (as long as you maintain compatibi
 
 The steps below outline one suggested process for completing the project -- however, this is just a suggestion to help you get started.  Unit tests can be executed by running `python agent_test.py -v`.  (See the [unittest](https://docs.python.org/3/library/unittest.html#basic-example) module for details.)
 
-0. Pass the test_get_move_interface and test_minimax_interface unit tests by implementing a fixed-depth call to minimax in `CustomPlayer.get_move()` and implementing a single-level search in `CustomPlayer.minimax()` (the interface checks only tests depth=1)
+0. Pass the `test_get_move_interface` and test_minimax_interface unit tests by implementing a fixed-depth call to minimax in `CustomPlayer.get_move()` and implementing a single-level search in `CustomPlayer.minimax()` (the interface checks only tests depth=1)
 
-0. Pass the test_minimax test by extending your `CustomPlayer.minimax()` function with the full recursive search process.  See Also: [AIMA Minimax Decision](https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md)
+0. Pass the `test_minimax` test by extending your `CustomPlayer.minimax()` function with the full recursive search process.  See also: [AIMA Minimax Decision](https://github.com/sunsided/aima-pseudocode/blob/master/md/Minimax-Decision.md)
 
-0. Pass the test_alphabeta_interface test by copying the code from `CustomPlayer.minimax()` into the `CustomPlayer.alphabeta()` function.
+0. Pass the `test_alphabeta_interface` test by copying the code from `CustomPlayer.minimax()` into the `CustomPlayer.alphabeta()` function.
 
-0. Pass the test_alphabeta test by extending your `CustomPlayer.alphabeta()` function to include alpha and beta pruning.  See Also: [AIMA Alpha-Beta Search](https://github.com/aimacode/aima-pseudocode/blob/master/md/Alpha-Beta-Search.md)
+0. Pass the `test_alphabeta` test by extending your `CustomPlayer.alphabeta()` function to include alpha and beta pruning.  See also: [AIMA Alpha-Beta Search](https://github.com/sunsided/aima-pseudocode/blob/master/md/Alpha-Beta-Search.md)
 
-0. Pass the test_get_move test by extending your fixed-depth call in `CustomPlayer.get_move()` to implement Iterative Deepening.  See Also [AIMA Iterative Deepening Search](https://github.com/aimacode/aima-pseudocode/blob/master/md/Iterative-Deepening-Search.md)
+0. Pass the `test_get_move` test by extending your fixed-depth call in `CustomPlayer.get_move()` to implement Iterative Deepening.  See Also [AIMA Iterative Deepening Search](https://github.com/sunsided/aima-pseudocode/blob/master/md/Iterative-Deepening-Search.md)
 
-0. Finally, pass the test_heuristic test by implementing any heuristic in `custom_score()`.  (This test only validates the return value type -- it does not check for "correctness" of your heuristic.)  You can see example heuristics in the `sample_players.py` file.
+0. Finally, pass the `test_heuristic` test by implementing any heuristic in `custom_score()`.  (This test only validates the return value type -- it does not check for "correctness" of your heuristic.)  You can see example heuristics in the `sample_players.py` file.
 
 
 ### Tournament
