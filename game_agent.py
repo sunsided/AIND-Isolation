@@ -143,7 +143,7 @@ class CustomPlayer:
         # move from the game board (i.e., an opening book), or returning
         # immediately if there are no legal moves
         # TODO: Initializations, opening moves, etc.
-        # TODO: Depending on the choice of the opponent, we can remove parts of the previously built tree and clean dictionaries (hash collision -> linear search)
+        # TODO: Depending on the choice of the opponent, we can remove parts of the previously built tree and clean dictionaries (hash collision -> linear search). Can we use the game round?
 
         position = None
         try:
@@ -248,7 +248,7 @@ class CustomPlayer:
 
         player = game.active_player
         if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, player), None
+            return self.score(game, game.active_player if maximizing_player else game.inactive_player), None
 
         # The infinities ensure that the first result always initializes the fields.
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
@@ -312,7 +312,7 @@ class CustomPlayer:
 
         player = game.active_player
         if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, player), None
+            return self.score(game, game.active_player if maximizing_player else game.inactive_player), None
 
         # The infinities ensure that the first result always initializes the fields.
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
