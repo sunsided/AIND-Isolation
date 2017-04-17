@@ -16,7 +16,7 @@ from isolation import Board
 
 Score = float
 Position = Tuple[int, int]
-CandidateMove = Tuple[Score, Position]
+CandidateMove = Tuple[Score, Optional[Position]]
 TimerFunction = Callable[[], Number]
 
 NEGATIVE_INFINITY = float("-inf")
@@ -90,7 +90,7 @@ class CustomPlayer:
                  iterative: bool=True, method: str='minimax', timeout: float=10.):
         self.search_depth = search_depth
         self.iterative = iterative
-        self.score = score_fn
+        self.score = score_fn  # type: Callable[[Board, Any], float]
         self.time_left = None
         self.TIMER_THRESHOLD = timeout
         self.method = method
@@ -209,6 +209,53 @@ class CustomPlayer:
         for m in game.get_legal_moves():
             yield m, game.forecast_move(m)
 
+    def minimax(self, game: Board, depth: int, maximizing_player: bool=True) -> CandidateMove:
+        """Implement the minimax search algorithm as described in the lectures.
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        maximizing_player : bool
+            Flag indicating whether the current search depth corresponds to a
+            maximizing layer (True) or a minimizing layer (False)
+
+        Returns
+        -------
+        float
+            The score for the current search branch
+
+        tuple(int, int)
+            The best move for the current branch; (-1, -1) for no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project unit tests; you cannot call any other
+                evaluation function directly.
+        """
+        assert self.time_left is not None
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise Timeout()
+
+        # TODO: Implement as queue
+
+        best_score = NEGATIVE_INFINITY
+        best_move = None
+        for move, branch in self.move_branches(game):
+            v = self.minimax_min(game, depth-1)
+            if v > best_score:
+                best_score = v
+                best_move = move
+
+        return best_score, best_move if best_move is not None else (-1, -1)
+
     def minimax_max(self, game: Board, depth: int) -> Score:
         """
         Performs the max player step of minimax. 
@@ -267,53 +314,6 @@ class CustomPlayer:
             v = min(v, self.minimax_max(branch, depth=depth-1))
         return v
 
-    def minimax(self, game: Board, depth: int, maximizing_player: bool=True) -> CandidateMove:
-        """Implement the minimax search algorithm as described in the lectures.
-
-        Parameters
-        ----------
-        game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
-            current game state
-
-        depth : int
-            Depth is an integer representing the maximum number of plies to
-            search in the game tree before aborting
-
-        maximizing_player : bool
-            Flag indicating whether the current search depth corresponds to a
-            maximizing layer (True) or a minimizing layer (False)
-
-        Returns
-        -------
-        float
-            The score for the current search branch
-
-        tuple(int, int)
-            The best move for the current branch; (-1, -1) for no legal moves
-
-        Notes
-        -----
-            (1) You MUST use the `self.score()` method for board evaluation
-                to pass the project unit tests; you cannot call any other
-                evaluation function directly.
-        """
-        assert self.time_left is not None
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
-
-        # TODO: Implement as queue
-
-        best_score = NEGATIVE_INFINITY
-        best_move = None
-        for move, branch in self.move_branches(game):
-            v = self.minimax_min(game, depth-1)
-            if v > best_score:
-                best_score = v
-                best_move = move
-
-        return best_score, best_move if best_move is not None else (-1, -1)
-
     def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
                   maximizing_player: bool=True) -> CandidateMove:
         """Implement minimax search with alpha-beta pruning as described in the
@@ -357,7 +357,29 @@ class CustomPlayer:
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: finish this function!
         # TODO: Sort for efficient pruning.
+        # TODO: Implement as queue
 
-        raise NotImplementedError
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player), None
+
+        # The infinities ensure that the first result always initializes the fields.
+        best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
+        best_move = None
+
+        for move, branch in self.move_branches(game):
+            v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
+            if maximizing_player:
+                if v > best_value:
+                    best_value, best_move = v, m
+                alpha = max(alpha, v)  # raise the lower bound
+                if v >= beta:
+                    break
+            else:
+                if v < best_value:
+                    best_value, best_move = v, m
+                beta = min(beta, v)  # lower the upper bound
+                if v <= alpha:
+                    break
+        return best_value, best_move
