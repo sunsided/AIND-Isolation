@@ -178,35 +178,6 @@ class CustomPlayer:
         # Return the best move from the last completed search iteration
         return best_move
 
-    def terminal_score(self, game: Board, depth: int) -> Optional[float]:
-        """
-        Decides if the game is at a terminal state and returns the score or heuristic, otherwise returns None.
-        
-        Parameters
-        ----------
-        game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
-            current game state
-
-        depth : int
-            Depth is an integer representing the maximum number of plies to
-            search in the game tree before aborting
-
-        Returns
-        -------
-        float
-            The heuristic value or utility if this is a terminal state.
-        
-        None
-            Indicates this is not a terminal state.
-        """
-        player = game.active_player
-        if game.is_winner(player) or game.is_loser(player):
-            return game.utility(game.active_player)
-        elif depth == 0:
-            return self.score(game, player)
-        return None
-
     @staticmethod
     def move_branches(game: Board) -> Iterable[Tuple[Position, Board]]:
         """
