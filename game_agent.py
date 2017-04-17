@@ -155,6 +155,8 @@ class CustomPlayer:
         # TODO: Depending on the choice of the opponent, we can remove parts of the previously built tree and clean dictionaries (hash collision -> linear search). Can we use the game round?
 
         best_value, best_move = NEGATIVE_INFINITY, None
+        depth = 0
+
         try:
             # The search method call (alpha beta or minimax) should happen in
             # here in order to avoid timeout. The try/except block will
@@ -162,17 +164,18 @@ class CustomPlayer:
             # when the timer gets close to expiring
 
             if self.iterative:
-                depth = 0
                 while True:
                     depth += 1
                     v, m = self.search(game, depth=depth, maximizing_player=True)
                     if v > best_value:
                         best_value, best_move = v, m
             else:
-                best_value, best_move = self.search(game, depth=self.search_depth, maximizing_player=True)
+                depth = self.search_depth
+                best_value, best_move = self.search(game, depth=depth, maximizing_player=True)
 
         except Timeout:
-            # Handle any actions required at timeout, if necessary
+            # TODO: Handle any actions required at timeout, if necessary
+            # print('Reached depth {} in move {}'.format(depth, game.move_count))
             pass
 
         # Return the best move from the last completed search iteration
@@ -194,7 +197,7 @@ class CustomPlayer:
         Iterable[Position, Board]
             The moves and their respective branch of the board.
         """
-        for m in game.get_legal_moves():
+        for m in game.get_legal_moves(game.active_player):
             yield m, game.forecast_move(m)
 
     def minimax(self, game: Board, depth: int, maximizing_player: bool=True) -> CandidateMove:
@@ -295,7 +298,7 @@ class CustomPlayer:
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: Sort for efficient pruning.
+        # TODO: Sort for efficient pruning. This requires knowledge of the previous expansions, because search is depth-first, not breadth-first.
         # TODO: Implement as queue
 
         player = game.active_player
@@ -306,6 +309,7 @@ class CustomPlayer:
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
+        # TODO: Maybe move branch to aid prediction
         for move, branch in self.move_branches(game):
             v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
             if maximizing_player:

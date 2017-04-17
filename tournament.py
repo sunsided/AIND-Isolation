@@ -23,6 +23,7 @@ import itertools
 import random
 import warnings
 from collections import namedtuple
+from time import time
 
 from game_agent import CustomPlayer
 from game_agent import custom_score
@@ -117,11 +118,16 @@ def play_round(agents, num_matches):
         counts = {agent_1.player: 0., agent_2.player: 0.}
         names = [agent_1.name, agent_2.name]
         print("  Match {}: {!s:^11} vs {!s:^11}".format(idx + 1, *names), end=' ')
+        print()
 
         # Each player takes a turn going first
         for p1, p2 in itertools.permutations((agent_1.player, agent_2.player)):
             for _ in range(num_matches):
+                start_time = time()
                 score_1, score_2 = play_match(p1, p2)
+                end_time = time()
+                print('\tGame took {0:1.3}s'.format(end_time - start_time))
+
                 counts[p1] += score_1
                 counts[p2] += score_2
                 total += score_1 + score_2
