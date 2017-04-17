@@ -246,73 +246,23 @@ class CustomPlayer:
 
         # TODO: Implement as queue
 
-        best_score = NEGATIVE_INFINITY
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player), None
+
+        # The infinities ensure that the first result always initializes the fields.
+        best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
+
         for move, branch in self.move_branches(game):
-            v = self.minimax_min(game, depth-1)
-            if v > best_score:
-                best_score = v
-                best_move = move
-
-        return best_score, best_move if best_move is not None else (-1, -1)
-
-    def minimax_max(self, game: Board, depth: int) -> Score:
-        """
-        Performs the max player step of minimax. 
-
-        Parameters
-        ----------
-        game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
-            current game state
-
-        depth : int
-            Depth is an integer representing the maximum number of plies to
-            search in the game tree before aborting
-
-        Returns
-        -------
-        float
-            The utility value or its best heuristic.
-        """
-        v = self.terminal_score(game, depth)
-        if v is not None:
-            return v
-        v = NEGATIVE_INFINITY
-        for _, branch in self.move_branches(game):
-            # TODO: Add caching/lookup - check for symmetries
-            # TODO: Rotation/Mirroring of a cache hit is not required until that branch is "physically" taken
-            v = max(v, self.minimax_min(branch, depth=depth-1))
-        return v
-
-    def minimax_min(self, game: Board, depth: int) -> Score:
-        """
-        Performs the min player step of minimax. 
-
-        Parameters
-        ----------
-        game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
-            current game state
-
-        depth : int
-            Depth is an integer representing the maximum number of plies to
-            search in the game tree before aborting
-
-        Returns
-        -------
-        float
-            The utility value or its best heuristic.
-        """
-        v = self.terminal_score(game, depth)
-        if v is not None:
-            return v
-        v = POSITIVE_INFINITY
-        for _, branch in self.move_branches(game):
-            # TODO: Add caching/lookup - check for symmetries
-            # TODO: Rotation/Mirroring of a cache hit is not required until that branch is "physically" taken
-            v = min(v, self.minimax_max(branch, depth=depth-1))
-        return v
+            v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
+            if maximizing_player:
+                if v > best_value:
+                    best_value, best_move = v, move
+            else:
+                if v < best_value:
+                    best_value, best_move = v, move
+        return best_value, best_move
 
     def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
                   maximizing_player: bool=True) -> CandidateMove:
@@ -371,15 +321,17 @@ class CustomPlayer:
         for move, branch in self.move_branches(game):
             v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
             if maximizing_player:
+                # If the value is better, store it and the move that led to it.
                 if v > best_value:
-                    best_value, best_move = v, m
+                    best_value, best_move = v, move
                 alpha = max(alpha, v)  # raise the lower bound
-                if v >= beta:
+                if v >= beta:  # TODO: add explanatory comment
                     break
             else:
+                # If the value is better, store it and the move that led to it.
                 if v < best_value:
-                    best_value, best_move = v, m
+                    best_value, best_move = v, move
                 beta = min(beta, v)  # lower the upper bound
-                if v <= alpha:
+                if v <= alpha:  # TODO: add explanatory comment
                     break
         return best_value, best_move
