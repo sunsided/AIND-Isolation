@@ -169,7 +169,7 @@ class Board(object):
                 "Invalid player in get_player_location: {}".format(player))
         w = idx // self.height
         h = idx % self.height
-        return (h, w)
+        return h, w
 
     def get_legal_moves(self, player=None):
         """Return the list of all legal moves for the specified player.

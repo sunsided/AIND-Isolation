@@ -71,7 +71,7 @@ You may write or modify code within each file (as long as you maintain compatibi
 
 The steps below outline one suggested process for completing the project -- however, this is just a suggestion to help you get started.  Unit tests can be executed by running `python agent_test.py -v`.  (See the [unittest](https://docs.python.org/3/library/unittest.html#basic-example) module for details.)
 
-0. Pass the `test_get_move_interface` and test_minimax_interface unit tests by implementing a fixed-depth call to minimax in `CustomPlayer.get_move()` and implementing a single-level search in `CustomPlayer.minimax()` (the interface checks only tests depth=1)
+0. Pass the `test_get_move_interface` and `test_minimax_interface` unit tests by implementing a fixed-depth call to minimax in `CustomPlayer.get_move()` and implementing a single-level search in `CustomPlayer.minimax()` (the interface checks only tests depth=1)
 
 0. Pass the `test_minimax` test by extending your `CustomPlayer.minimax()` function with the full recursive search process.  See also: [AIMA Minimax Decision](https://github.com/sunsided/aima-pseudocode/blob/master/md/Minimax-Decision.md)
 
