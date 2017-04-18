@@ -175,18 +175,18 @@ class TreeTest(unittest.TestCase):
         #               \   /
         #               a3,c3       max
 
-        a = GraphNode(self.registry, game, 0.0, tag='root')
-        a1 = a.add_child((2, 0), a.board.forecast_move((2, 0)), 1.0, tag='a1')
-        b1 = a1.add_child((1, 0), a1.board.forecast_move((1, 0)), 1.0, tag='b1')
-        a2 = b1.add_child((2, 1), b1.board.forecast_move((2, 1)), 1.0, tag='a2')
-        b2 = a2.add_child((1, 1), a2.board.forecast_move((1, 1)), 1.0, tag='b2')
-        a3 = b2.add_child((3, 3), b2.board.forecast_move((3, 3)), 1.0, tag='a3')
+        a = GraphNode(self.registry, game, 0.0)
+        a1 = a.add_child((2, 0), a.board.forecast_move((2, 0)), 1.0)
+        b1 = a1.add_child((1, 0), a1.board.forecast_move((1, 0)), 1.0)
+        a2 = b1.add_child((2, 1), b1.board.forecast_move((2, 1)), 1.0)
+        b2 = a2.add_child((1, 1), a2.board.forecast_move((1, 1)), 1.0)
+        a3 = b2.add_child((3, 3), b2.board.forecast_move((3, 3)), 1.0)
 
-        c1 = a.add_child((2, 1), a.board.forecast_move((2, 1)), 1.0, tag='c1')
-        d1 = c1.add_child((1, 0), c1.board.forecast_move((1, 0)), 1.0, tag='d1')
-        c2 = d1.add_child((2, 0), d1.board.forecast_move((2, 0)), 1.0, tag='c2')
-        d2 = c2.add_child((1, 1), c2.board.forecast_move((1, 1)), 1.0, tag='d2')
-        c3 = d2.add_child((3, 3), d2.board.forecast_move((3, 3)), 1.0, tag='c3')
+        c1 = a.add_child((2, 1), a.board.forecast_move((2, 1)), 1.0)
+        d1 = c1.add_child((1, 0), c1.board.forecast_move((1, 0)), 1.0)
+        c2 = d1.add_child((2, 0), d1.board.forecast_move((2, 0)), 1.0)
+        d2 = c2.add_child((1, 1), c2.board.forecast_move((1, 1)), 1.0)
+        c3 = d2.add_child((3, 3), d2.board.forecast_move((3, 3)), 1.0)
 
         a2.make_root(a2.age + 1)
 

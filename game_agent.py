@@ -67,6 +67,7 @@ def custom_score(game: Board, player: Any) -> float:
 
 
 class GraphEdge(NamedTuple):
+    """An edge describing a move to get from one node to another."""
     top: 'GraphNode'
     bottom: 'GraphNode'
     move: Position
@@ -79,18 +80,48 @@ class GraphNodeCache:
         self._registry = {}  # type: Dict[int, GraphNode]
 
     def clear_registry(self):
+        """Clears the registry."""
         self._registry.clear()
 
     def find(self, branch: Board) -> Optional['GraphNode']:
+        """Attempts to find a graph node given a board state.
+
+        Parameters
+        ----------
+        branch : Board
+            The branch node to explore.
+
+        Returns
+        -------
+        GraphNode
+            The cached node.
+        None
+            No cached node existed.
+        """
         key = branch.hash()
         return self._registry[key] if key in self._registry else None
 
     def register(self, node: 'GraphNode'):
+        """Registers a new node with the cache.
+
+        Parameters
+        ----------
+        node : GraphNode
+            The node to register.
+        """
         key = node.board.hash()
         assert key not in self._registry
         self._registry[key] = node
 
     def deregister(self, node: 'GraphNode'):
+        """Deregisters an existing node from the cache.
+
+        Parameters
+        ----------
+        node : GraphNode
+            The graph node to remove.
+        """
+        assert node.board is not None
         key = node.board.hash()
         if key in self._registry:
             del self._registry[key]
@@ -102,23 +133,46 @@ class GraphNodeCache:
 class GraphNode:
     """Graph node structure to maintain explored board states."""
 
-    def __init__(self, registry: GraphNodeCache, branch: Board, score: float, age: int = 0, tag: Optional[str]=None):
+    def __init__(self, registry: GraphNodeCache, branch: Board, score: float, age: int = 0):
+        """
+        Parameters
+        ----------
+        registry : GraphNodeCache
+            A registry used for caching already explored board states and their corresponding node.       
+        branch : Board
+            The board state described by this node.
+        score : float
+            A utility or heuristics value judging the quality of the move.
+        age : int
+            The current age of the node.
+        """
         self._in_edges = []   # type: List[GraphEdge]
         self._out_edges = []  # type: List[GraphEdge]
         self.registry = registry
         self.board = branch   # type: Optional[Board]
         self.score = score
         self.age = age
-        self.tag = tag
         registry.register(self)
 
     def __del__(self):
         self.purge(self.age)
 
     def __str__(self):
-        return '{} {}'.format(self.tag, self.board)
+        return 'age {}, {}'.format(self.age, self.board.to_string())
 
     def set_age(self, age: int) -> int:
+        """Sets the age of this node and its descendants.
+
+        Parameters
+        ----------
+        age : int
+            The new age.
+
+        Returns
+        -------
+        int
+            The previous age.
+        """
         previous_age, self.age = self.age, age
         for edge in self._out_edges:
             edge.bottom.set_age(age)
@@ -126,10 +180,35 @@ class GraphNode:
 
     @property
     def children(self) -> Iterable[GraphEdge]:
+        """Iterates the outgoing edges.
+
+        Returns
+        -------
+        Iterable[GraphEdge]
+            The outgoing edges.
+        """
         return self._out_edges
 
-    def add_child(self, move: Position, branch: Board, score: float, tag: Optional[str]=None, sort_children: bool=True) -> 'GraphNode':
-        child = self.registry.find(branch) or GraphNode(self.registry, branch, score, self.age, tag)
+    def add_child(self, move: Position, branch: Board, score: float, sort_children: bool=True) -> 'GraphNode':
+        """Adds a child to this node.
+
+        Parameters
+        ----------
+        move : Position
+            The move that resulted in the new child.
+        branch : Board
+            The board after the move has been made.
+        score : float
+            A utility or heuristics value judging the quality of the move.
+        sort_children : bool
+            A bool indicating if the children should be sorted immediately.
+            
+        Returns
+        -------
+        GraphNode
+            The child node.
+        """
+        child = self.registry.find(branch) or GraphNode(self.registry, branch, score, self.age)
         edge = GraphEdge(top=self, bottom=child, move=move)
         child._in_edges.append(edge)
         self._out_edges.append(edge)
@@ -141,35 +220,40 @@ class GraphNode:
         """Sorts the children by score in descending order."""
         self._out_edges = sorted(self._out_edges, key=lambda e: e.bottom.score, reverse=True)
 
-    def detach_bottom_edge(self, edge):
-        if edge in self._out_edges:
-            self._out_edges.remove(edge)
-
-    def detach_top_edge(self, edge):
-        if edge in self._in_edges:
-            self._in_edges.remove(edge)
-
     def make_root(self, new_age: int):
+        """Makes this node the new root of the graph, purging its ancestors and all unrelated nodes.
+
+        Parameters
+        ----------
+        new_age : int
+            The new age of the node and its children. This allows for purging all
+            nodes that are not descendants of this node.
+        """
         # Painting our children with the new age masks them from purging.
         threshold_age = self.set_age(new_age)
         # Delete all ancestors, siblings and their children, but not OUR children.
         while len(self._in_edges) > 0:
             edge = self._in_edges.pop()  # type: GraphEdge
-            edge.top.detach_bottom_edge(edge)
             edge.top.purge(threshold_age)
 
     def purge(self, threshold_age: int):
+        """Removes this node from the graph, while also purging its ancestors and children.
+
+        Parameters
+        ---------
+        threshold_age : int
+            The age below which this node is purged. If the node is older than this number,
+            it will not be purged and also not propagate the wave.
+        """
         if self.age > threshold_age or self.board is None:
             return
         self.registry.deregister(self)
         self.board = None
         while len(self._in_edges) > 0:
             edge = self._in_edges.pop()  # type: GraphEdge
-            edge.top.detach_bottom_edge(edge)
             edge.top.purge(threshold_age)
         while len(self._out_edges) > 0:
             edge = self._out_edges.pop()  # type: GraphEdge
-            edge.bottom.detach_top_edge(edge)
             edge.bottom.purge(threshold_age)
 
 
@@ -179,7 +263,7 @@ class CustomPlayer:
     finish and test this player to make sure it properly uses minimax and
     alpha-beta to return a good move before the search time limit expires.
 
-    Parameter
+    Parameters
     ----------
     search_depth : int (optional)
         A strictly positive integer (i.e., 1, 2, 3,...) for the number of
