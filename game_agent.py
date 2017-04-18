@@ -7,7 +7,7 @@ You must test your agent's strength against a set of agents with known
 relative strength using tournament.py and include the results in your report.
 """
 
-from typing import Callable, Any, Tuple, List, Optional, Iterable
+from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple
 from numbers import Number
 from operator import itemgetter
 
@@ -66,70 +66,111 @@ def custom_score(game: Board, player: Any) -> float:
     return float(own_moves - opp_moves)
 
 
-class TreeNode:
-    _registry = {}
+class GraphEdge(NamedTuple):
+    top: 'GraphNode'
+    bottom: 'GraphNode'
+    move: Position
 
-    @staticmethod
-    def find_node(branch: Board) -> Optional['TreeNode']:
-        return TreeNode._registry[branch] if branch in TreeNode._registry else None
 
-    def __init__(self, parent: Optional['TreeNode'], move: Optional[Position], branch: Board):
-        self._parent = parent
-        self._children = []
-        self._branch = branch
-        self._move = move
-        TreeNode._registry[branch] = self
+class GraphNodeCache:
+    """Cache for already seen board states."""
+
+    def __init__(self):
+        self._registry = {}  # type: Dict[int, GraphNode]
+
+    def clear_registry(self):
+        self._registry.clear()
+
+    def find(self, branch: Board) -> Optional['GraphNode']:
+        key = branch.hash()
+        return self._registry[key] if key in self._registry else None
+
+    def register(self, node: 'GraphNode'):
+        key = node.board.hash()
+        assert key not in self._registry
+        self._registry[key] = node
+
+    def deregister(self, node: 'GraphNode'):
+        key = node.board.hash()
+        if key in self._registry:
+            del self._registry[key]
+
+    def __len__(self):
+        return len(self._registry)
+
+
+class GraphNode:
+    """Graph node structure to maintain explored board states."""
+
+    def __init__(self, registry: GraphNodeCache, branch: Board, score: float, age: int = 0, tag: Optional[str]=None):
+        self._in_edges = []   # type: List[GraphEdge]
+        self._out_edges = []  # type: List[GraphEdge]
+        self.registry = registry
+        self.board = branch   # type: Optional[Board]
+        self.score = score
+        self.age = age
+        self.tag = tag
+        registry.register(self)
 
     def __del__(self):
-        for child in self.children:
-            del child
-        if self.parent is not None:
-            del self._parent
-        del TreeNode._registry[self.branch]
-        self._branch = None
-        self._move = None
+        self.purge(self.age)
 
-    def __hash__(self):
-        return self._branch.hash()
+    def __str__(self):
+        return '{} {}'.format(self.tag, self.board)
 
-    def add_childs(self, children: Iterable['TreeNode']):
-        for child in children:
-            self._children.append(child)
-
-    def forget_child(self, child: 'TreeNode'):
-        self._children.remove(child)
+    def set_age(self, age: int) -> int:
+        previous_age, self.age = self.age, age
+        for edge in self._out_edges:
+            edge.bottom.set_age(age)
+        return previous_age
 
     @property
-    def parent(self) -> Optional['TreeNode']:
-        return self._parent
+    def children(self) -> Iterable[GraphEdge]:
+        return self._out_edges
 
-    @property
-    def children(self) -> Iterable['TreeNode']:
-        return self._children
+    def add_child(self, move: Position, branch: Board, score: float, tag: Optional[str]=None, sort_children: bool=True) -> 'GraphNode':
+        child = self.registry.find(branch) or GraphNode(self.registry, branch, score, self.age, tag)
+        edge = GraphEdge(top=self, bottom=child, move=move)
+        child._in_edges.append(edge)
+        self._out_edges.append(edge)
+        if sort_children:
+            self.sort_children()
+        return child
 
-    @property
-    def has_children(self) -> bool:
-        return any(self._children)
+    def sort_children(self):
+        """Sorts the children by score in descending order."""
+        self._out_edges = sorted(self._out_edges, key=lambda e: e.bottom.score, reverse=True)
 
-    @property
-    def siblings(self) -> Iterable['TreeNode']:
-        if self._parent is None:
-            return []
-        return (child for child in self._parent.children if child is not self)
+    def detach_bottom_edge(self, edge):
+        if edge in self._out_edges:
+            self._out_edges.remove(edge)
 
-    @property
-    def branch(self) -> Optional[Board]:
-        return self._branch
+    def detach_top_edge(self, edge):
+        if edge in self._in_edges:
+            self._in_edges.remove(edge)
 
-    @property
-    def move(self) -> Optional[Position]:
-        return self._move
+    def make_root(self, new_age: int):
+        # Painting our children with the new age masks them from purging.
+        threshold_age = self.set_age(new_age)
+        # Delete all ancestors, siblings and their children, but not OUR children.
+        while len(self._in_edges) > 0:
+            edge = self._in_edges.pop()  # type: GraphEdge
+            edge.top.detach_bottom_edge(edge)
+            edge.top.purge(threshold_age)
 
-    def make_root(self):
-        if self.parent is not None:
-            self.parent.forget_child(self)
-        for sibling in self.siblings:
-            del sibling
+    def purge(self, threshold_age: int):
+        if self.age > threshold_age or self.board is None:
+            return
+        self.registry.deregister(self)
+        self.board = None
+        while len(self._in_edges) > 0:
+            edge = self._in_edges.pop()  # type: GraphEdge
+            edge.top.detach_bottom_edge(edge)
+            edge.top.purge(threshold_age)
+        while len(self._out_edges) > 0:
+            edge = self._out_edges.pop()  # type: GraphEdge
+            edge.bottom.detach_top_edge(edge)
+            edge.bottom.purge(threshold_age)
 
 
 class CustomPlayer:
@@ -138,7 +179,7 @@ class CustomPlayer:
     finish and test this player to make sure it properly uses minimax and
     alpha-beta to return a good move before the search time limit expires.
 
-    Parameters
+    Parameter
     ----------
     search_depth : int (optional)
         A strictly positive integer (i.e., 1, 2, 3,...) for the number of
@@ -171,7 +212,7 @@ class CustomPlayer:
         self.time_left = None
         self.TIMER_THRESHOLD = timeout
         self.method = method
-        self.tree = None  # type: Optional[TreeNode]
+        self.tree = None  # type: Optional[GraphNode]
 
         self.search = self.minimax if method == 'minimax' else self.alphabeta
         assert method == 'minimax' or method == 'alphabeta', \
@@ -225,7 +266,7 @@ class CustomPlayer:
         depth = 0
 
         if self.tree is None:
-            self.tree = TreeNode(None, None, game)
+            self.tree = GraphNode(None, None, game)
 
         try:
             # The search method call (alpha beta or minimax) should happen in
@@ -315,9 +356,9 @@ class CustomPlayer:
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
-        root = TreeNode.find_node(game) or TreeNode(None, None, game)
+        root = GraphNode.find_node(game) or GraphNode(None, None, game)
         if not root.has_children:
-            root.add_childs((TreeNode(root, move, game.forecast_move(move)) for move in game.get_legal_moves()))
+            root.add_childs((GraphNode(root, move, game.forecast_move(move)) for move in game.get_legal_moves()))
 
         # TODO: Move is not a property of a child, but of an edge TO the child. Otherwise different parents couldn't refer to the same game state.
         # TODO: Beware circular cleanups if a node reuses a different node's parent. Maybe track all parents and purge DOWN only if all parents are gone?
