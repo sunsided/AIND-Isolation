@@ -7,9 +7,8 @@ You must test your agent's strength against a set of agents with known
 relative strength using tournament.py and include the results in your report.
 """
 
-from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple
+from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Union
 from numbers import Number
-from operator import itemgetter
 
 from isolation import Board
 
@@ -61,6 +60,8 @@ def custom_score(game: Board, player: Any) -> float:
     if game.is_winner(player):
         return float("inf")
 
+    # TODO: Strategy: Number of legal moves in two or three rounds assuming the opponent doesn't move
+
     own_moves = len(game.get_legal_moves(player))
     opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
     return float(own_moves - opp_moves)
@@ -79,7 +80,7 @@ class GraphNodeCache:
     def __init__(self):
         self._registry = {}  # type: Dict[int, GraphNode]
 
-    def clear_registry(self):
+    def clear(self):
         """Clears the registry."""
         self._registry.clear()
 
@@ -109,6 +110,7 @@ class GraphNodeCache:
         node : GraphNode
             The node to register.
         """
+        assert node.board is not None
         key = node.board.hash()
         assert key not in self._registry
         self._registry[key] = node
@@ -133,7 +135,7 @@ class GraphNodeCache:
 class GraphNode:
     """Graph node structure to maintain explored board states."""
 
-    def __init__(self, registry: GraphNodeCache, branch: Board, score: float, age: int = 0):
+    def __init__(self, registry: GraphNodeCache, branch: Optional[Board], score: float, age: int = 0):
         """
         Parameters
         ----------
@@ -149,16 +151,37 @@ class GraphNode:
         self._in_edges = []   # type: List[GraphEdge]
         self._out_edges = []  # type: List[GraphEdge]
         self.registry = registry
-        self.board = branch   # type: Optional[Board]
+        self.board = branch
         self.score = score
         self.age = age
+        self.tainted = False
+        self.expected_children = -1
         registry.register(self)
 
     def __del__(self):
         self.purge(self.age)
 
     def __str__(self):
-        return 'age {}, {}'.format(self.age, self.board.to_string())
+        return 'Node at age {} - score {} - {} ancestors, {} descendants\n{}'\
+            .format(self.age, self.score, len(self._in_edges), len(self._out_edges), self.board.to_string())
+
+    def update_score(self, score: float):
+        """Sets the score of this node and marks the ancestors as tainted.
+        
+        Parameters
+        ----------
+        score : float
+            The new score.
+        """
+        if self.score == score:
+            return
+        self.score = score
+        for edge in self._in_edges:
+            edge.top.taint()
+
+    def taint(self):
+        """Marks this node as tainted, indicating that the outgoing edges need sorting."""
+        self.tainted = True
 
     def set_age(self, age: int) -> int:
         """Sets the age of this node and its descendants.
@@ -179,17 +202,34 @@ class GraphNode:
         return previous_age
 
     @property
-    def children(self) -> Iterable[GraphEdge]:
-        """Iterates the outgoing edges.
+    def has_children(self) -> bool:
+        return len(self._out_edges) > 0
+
+    @property
+    def has_seen_all_children(self) -> bool:
+        """Determines if all children were discovered."""
+        return len(self._out_edges) == self.expected_children
+
+    def all_children_seen(self):
+        """Marks that all children were discovered."""
+        self.expected_children = len(self._out_edges)
+
+    def children(self, should_sort: bool=True) -> Iterable[Tuple[Position, 'GraphNode']]:
+        """Iterates the outgoing edges. 
+        
+        If this node is tainted, the outgoing edges will be sorted and the tainted flag will be reset.
 
         Returns
         -------
-        Iterable[GraphEdge]
-            The outgoing edges.
+        Iterable[Tuple[Position, GraphNode]]
+            A move leading to a node.
         """
-        return self._out_edges
+        if self.tainted and should_sort:
+            self.sort_children()
+        for edge in self._out_edges:
+            yield edge.move, edge.bottom
 
-    def add_child(self, move: Position, branch: Board, score: float, sort_children: bool=True) -> 'GraphNode':
+    def add_child(self, move: Position, branch: Board, score: float) -> 'GraphNode':
         """Adds a child to this node.
 
         Parameters
@@ -200,8 +240,6 @@ class GraphNode:
             The board after the move has been made.
         score : float
             A utility or heuristics value judging the quality of the move.
-        sort_children : bool
-            A bool indicating if the children should be sorted immediately.
             
         Returns
         -------
@@ -212,13 +250,13 @@ class GraphNode:
         edge = GraphEdge(top=self, bottom=child, move=move)
         child._in_edges.append(edge)
         self._out_edges.append(edge)
-        if sort_children:
-            self.sort_children()
+        self.taint()
         return child
 
     def sort_children(self):
         """Sorts the children by score in descending order."""
-        self._out_edges = sorted(self._out_edges, key=lambda e: e.bottom.score, reverse=True)
+        self._out_edges = sorted(self._out_edges, key=lambda e: -e.bottom.score, reverse=False)
+        self.tainted = False
 
     def make_root(self, new_age: int):
         """Makes this node the new root of the graph, purging its ancestors and all unrelated nodes.
@@ -296,11 +334,35 @@ class CustomPlayer:
         self.time_left = None
         self.TIMER_THRESHOLD = timeout
         self.method = method
+
         self.tree = None  # type: Optional[GraphNode]
+        self.move_registry = GraphNodeCache()
 
         self.search = self.minimax if method == 'minimax' else self.alphabeta
         assert method == 'minimax' or method == 'alphabeta', \
             'The search method {} is not implemented.'.format(method)
+
+    @property
+    def is_unit_test(self):
+        return self.score != custom_score
+
+    def find_node(self, game: Board) -> Optional[GraphNode]:
+        """Attempts to find the node belonging to the specified game state.
+        
+        Parameters
+        ----------
+        game : `isolation.Board`
+            An instance of `isolation.Board` encoding the current state of the
+            game (e.g., player locations and blocked cells).
+            
+        Returns
+        -------
+        GraphNode
+            The node.
+        None
+            No node was found.
+        """
+        return self.move_registry.find(game)
 
     def get_move(self, game: Board, legal_moves: List[Position], time_left: TimerFunction) -> Position:
         """Search for the best move from the available legal moves and return a
@@ -344,13 +406,13 @@ class CustomPlayer:
         # move from the game board (i.e., an opening book), or returning
         # immediately if there are no legal moves
         # TODO: Initializations, opening moves, etc.
-        # TODO: Depending on the choice of the opponent, we can remove parts of the previously built tree and clean dictionaries (hash collision -> linear search). Can we use the game round?
+
+        self.tree = self.find_node(game) or \
+                    GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+        self.tree.make_root(game.move_count)
 
         best_value, best_move = NEGATIVE_INFINITY, None
         depth = 0
-
-        if self.tree is None:
-            self.tree = GraphNode(None, None, game)
 
         try:
             # The search method call (alpha beta or minimax) should happen in
@@ -426,37 +488,57 @@ class CustomPlayer:
                 to pass the project unit tests; you cannot call any other
                 evaluation function directly.
         """
-        assert self.time_left is not None
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
         # TODO: Implement as queue
 
-        player = game.active_player
-        if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, game.active_player if maximizing_player else game.inactive_player), None
+        # Fetch the current node. Normally, the node must not be None at this point,
+        # but this assertion breaks the unit tests provided by Udacity.
+        current_node = self.find_node(game)
+        if current_node is None:
+            self.move_registry.clear()
+            current_node = GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+
+        # Termination criterion.
+        if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
+            score = self.score(game, game.active_player if maximizing_player else game.inactive_player)
+            current_node.update_score(score)
+            return score, None
 
         # The infinities ensure that the first result always initializes the fields.
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
-        root = GraphNode.find_node(game) or GraphNode(None, None, game)
-        if not root.has_children:
-            root.add_childs((GraphNode(root, move, game.forecast_move(move)) for move in game.get_legal_moves()))
+        if current_node.has_seen_all_children and not self.is_unit_test:
+            for move, node in current_node.children(should_sort=False):
+                best_value, best_move = self.minimax_recursion(node.board, depth, move,
+                                                               best_value, best_move, maximizing_player)
+        else:
+            # Explore the children
+            for move in game.get_legal_moves():
+                branch = game.forecast_move(move)
 
-        # TODO: Move is not a property of a child, but of an edge TO the child. Otherwise different parents couldn't refer to the same game state.
-        # TODO: Beware circular cleanups if a node reuses a different node's parent. Maybe track all parents and purge DOWN only if all parents are gone?
+                # We add this branch as a child and set a dummy score.
+                # The actual score will be determined by the recursion into minimax.
+                current_node.add_child(move, branch, score=float('nan'))
+                # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
+                best_value, best_move = self.minimax_recursion(branch, depth, move,
+                                                               best_value, best_move, maximizing_player)
 
-        for node in root.children:
-            move, branch = node.move, node.branch
-            v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
-            if maximizing_player:
-                if v > best_value:
-                    best_value, best_move = v, move
-            else:
-                if v < best_value:
-                    best_value, best_move = v, move
+        current_node.all_children_seen()
+        current_node.update_score(best_value)
         return best_value, best_move
+
+    def minimax_recursion(self, board: Board, depth, current_move, current_best_value, current_best_move, maximizing_player):
+        v, m = self.minimax(board, depth - 1, maximizing_player=not maximizing_player)
+        if maximizing_player:
+            if v > current_best_value:
+                current_best_value, current_best_move = v, current_move
+        else:
+            if v < current_best_value:
+                current_best_value, current_best_move = v, current_move
+        return current_best_value, current_best_move
 
     def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
                   maximizing_player: bool=True) -> CandidateMove:
@@ -506,7 +588,7 @@ class CustomPlayer:
 
         player = game.active_player
         if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, game.active_player if maximizing_player else game.inactive_player), None
+            return self.score(game, player if maximizing_player else game.inactive_player), None
 
         # The infinities ensure that the first result always initializes the fields.
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY

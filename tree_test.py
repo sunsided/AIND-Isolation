@@ -129,10 +129,10 @@ class TreeTest(unittest.TestCase):
         c1.add_child((2, 0), c1.board.forecast_move((2, 0)), 1.0)
 
         score = float('inf')
-        for child in a.children:
-            self.assertLess(child.bottom.score, score,
+        for move, child in a.children():
+            self.assertLess(child.score, score,
                             "Children must be sorted by score in descending order")
-            score = child.bottom.score
+            score = child.score
 
     def test_make_root(self):
         """Test output interface of heuristic score function interface."""

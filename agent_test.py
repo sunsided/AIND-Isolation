@@ -537,7 +537,7 @@ class Project1Test(unittest.TestCase):
             diff_unique = abs(board.counts[1] - exact_counts[idx][1])
 
             self.assertTrue(timer.invoked, WRONG_HEURISTIC)
-            self.assertTrue(diff_total <= 1 and diff_unique == 0, ID_FAIL)
+            self.assertTrue(diff_total <= 1 and diff_unique == 0, ID_FAIL + '\ndiff_total: {}, diff_unique: {}'.format(diff_total, diff_unique))
 
             self.assertTrue(chosen_move in legal_moves, INVALID_MOVE.format(
                 legal_moves, chosen_move))
