@@ -7,7 +7,7 @@ You must test your agent's strength against a set of agents with known
 relative strength using tournament.py and include the results in your report.
 """
 
-from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Union
+from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
 from numbers import Number
 
 from isolation import Board
@@ -80,6 +80,13 @@ class GraphNodeCache:
     def __init__(self):
         self._registry = {}  # type: Dict[int, GraphNode]
 
+    @staticmethod
+    def _hash(board: Board):
+        # Udacity's provided implementation hashes on strings generated from lists ...
+        # I feel bad for directly accessing that field, but speed matters here and I
+        # can't change the interface.
+        return hash(tuple(board._board_state))
+
     def clear(self):
         """Clears the registry."""
         self._registry.clear()
@@ -99,7 +106,9 @@ class GraphNodeCache:
         None
             No cached node existed.
         """
-        key = branch.hash()
+
+        # TODO: It might be interesting to also check for symmetric states, e.g. rotations and transposes.
+        key = self._hash(branch)
         return self._registry[key] if key in self._registry else None
 
     def register(self, node: 'GraphNode'):
@@ -111,7 +120,7 @@ class GraphNodeCache:
             The node to register.
         """
         assert node.board is not None
-        key = node.board.hash()
+        key = self._hash(node.board)
         assert key not in self._registry
         self._registry[key] = node
 
@@ -124,7 +133,7 @@ class GraphNodeCache:
             The graph node to remove.
         """
         assert node.board is not None
-        key = node.board.hash()
+        key = self._hash(node.board)
         if key in self._registry:
             del self._registry[key]
 
@@ -148,8 +157,9 @@ class GraphNode:
         age : int
             The current age of the node.
         """
-        self._in_edges = []   # type: List[GraphEdge]
+        self._in_edges = set()  # type: Set[GraphEdge]
         self._out_edges = []  # type: List[GraphEdge]
+        self._moves = {}  # type: Dict[Position, GraphNode]
         self.registry = registry
         self.board = branch
         self.score = score
@@ -229,6 +239,29 @@ class GraphNode:
         for edge in self._out_edges:
             yield edge.move, edge.bottom
 
+    def explore_child_boards(self, should_sort: bool=True) -> Iterable[Tuple[Position, Board]]:
+        """Iterates known and unexplored outgoing edges.
+        
+        If this node is tainted, the outgoing edges will be sorted and the tainted flag will be reset.
+
+        Returns
+        -------
+        Iterable[Tuple[bool, Position, GraphNode]]
+            A move leading to a node.
+        """
+        if self.has_seen_all_children:
+            return ((move, node.board) for move, node in self.children(should_sort))
+
+        all_moves = set(self.board.get_legal_moves())
+        known_moves = self._moves.keys()
+        for move in (all_moves - known_moves):
+            branch = self.board.forecast_move(move)
+            self.add_child(move, branch, score=float('nan'))
+            yield move, branch
+        for move in (known_moves - all_moves):
+            yield False, move, self._moves[move].board
+        self.all_children_seen()
+
     def add_child(self, move: Position, branch: Board, score: float) -> 'GraphNode':
         """Adds a child to this node.
 
@@ -247,8 +280,9 @@ class GraphNode:
             The child node.
         """
         child = self.registry.find(branch) or GraphNode(self.registry, branch, score, self.age)
+        self._moves[move] = child
         edge = GraphEdge(top=self, bottom=child, move=move)
-        child._in_edges.append(edge)
+        child._in_edges.add(edge)
         self._out_edges.append(edge)
         self.taint()
         return child
@@ -510,18 +544,9 @@ class CustomPlayer:
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
-        if current_node.has_seen_all_children and not self.is_unit_test:
-            move_branches = ((move, node.board) for move, node in current_node.children(should_sort=False))
-        else:
-            move_branches = self.move_branches(game)
-
         # Explore the children
-        for move, branch in move_branches:
-            # We add this branch as a child and set a dummy score.
-            # The actual score will be determined by the recursion into minimax.
-            current_node.add_child(move, branch, score=float('nan'))
+        for move, branch in current_node.explore_child_boards(should_sort=False):
             # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
-
             v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
             if maximizing_player:
                 if v > best_value:
@@ -597,13 +622,8 @@ class CustomPlayer:
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
-        if current_node.has_seen_all_children and not self.is_unit_test:
-            move_branches = ((move, node.board) for move, node in current_node.children())
-        else:
-            move_branches = self.move_branches(game)
-
         # TODO: Maybe move branch to aid prediction
-        for move, branch in move_branches:
+        for move, branch in current_node.explore_child_boards(should_sort=True):
             v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
             if maximizing_player:
                 if v > best_value:
