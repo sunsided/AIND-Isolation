@@ -109,7 +109,11 @@ class GraphNodeCache:
 
         # TODO: It might be interesting to also check for symmetric states, e.g. rotations and transposes.
         key = self._hash(branch)
-        return self._registry[key] if key in self._registry else None
+        # return self._registry[key] if key in self._registry else None
+        try:
+            return self._registry[key]
+        except KeyError:
+            return None
 
     def register(self, node: 'GraphNode'):
         """Registers a new node with the cache.
@@ -165,7 +169,7 @@ class GraphNode:
         self.score = score
         self.age = age
         self.tainted = False
-        self.expected_children = -1
+        self._has_seen_all_children = False
         registry.register(self)
 
     def __del__(self):
@@ -218,11 +222,11 @@ class GraphNode:
     @property
     def has_seen_all_children(self) -> bool:
         """Determines if all children were discovered."""
-        return len(self._out_edges) == self.expected_children
+        return self._has_seen_all_children
 
     def all_children_seen(self):
         """Marks that all children were discovered."""
-        self.expected_children = len(self._out_edges)
+        self._has_seen_all_children = True
 
     def children(self, should_sort: bool=True) -> Iterable[Tuple[Position, 'GraphNode']]:
         """Iterates the outgoing edges. 
