@@ -62,7 +62,7 @@ def custom_score(game: Board, player: Any) -> float:
 
     # TODO: Strategy: Number of legal moves in two or three rounds assuming the opponent doesn't move
 
-    own_moves = len(game.get_legal_moves(player))
+    own_moves = len(game.get_legal_moves(player))  # TODO: that should be the number of childs for the cached node
     opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
     return float(own_moves - opp_moves)
 
@@ -254,12 +254,14 @@ class GraphNode:
 
         all_moves = set(self.board.get_legal_moves())
         known_moves = self._moves.keys()
-        for move in (all_moves - known_moves):
+        for move in all_moves:
+            if move in known_moves:
+                continue
             branch = self.board.forecast_move(move)
-            self.add_child(move, branch, score=float('nan'))
+            self.add_child(move, branch, score=0.0)
             yield move, branch
         for move in (known_moves - all_moves):
-            yield False, move, self._moves[move].board
+            yield move, self._moves[move].board
         self.all_children_seen()
 
     def add_child(self, move: Position, branch: Board, score: float) -> 'GraphNode':
