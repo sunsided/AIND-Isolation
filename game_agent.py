@@ -408,7 +408,7 @@ class CustomPlayer:
         # TODO: Initializations, opening moves, etc.
 
         self.tree = self.find_node(game) or \
-                    GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+                    GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count)
         self.tree.make_root(game.move_count)
 
         best_value, best_move = NEGATIVE_INFINITY, None
@@ -511,34 +511,28 @@ class CustomPlayer:
         best_move = None
 
         if current_node.has_seen_all_children and not self.is_unit_test:
-            for move, node in current_node.children(should_sort=False):
-                best_value, best_move = self.minimax_recursion(node.board, depth, move,
-                                                               best_value, best_move, maximizing_player)
+            move_branches = ((move, node.board) for move, node in current_node.children(should_sort=False))
         else:
-            # Explore the children
-            for move in game.get_legal_moves():
-                branch = game.forecast_move(move)
+            move_branches = self.move_branches(game)
 
-                # We add this branch as a child and set a dummy score.
-                # The actual score will be determined by the recursion into minimax.
-                current_node.add_child(move, branch, score=float('nan'))
-                # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
-                best_value, best_move = self.minimax_recursion(branch, depth, move,
-                                                               best_value, best_move, maximizing_player)
+        # Explore the children
+        for move, branch in move_branches:
+            # We add this branch as a child and set a dummy score.
+            # The actual score will be determined by the recursion into minimax.
+            current_node.add_child(move, branch, score=float('nan'))
+            # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
+
+            v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
+            if maximizing_player:
+                if v > best_value:
+                    best_value, best_move = v, move
+            else:
+                if v < best_value:
+                    best_value, best_move = v, move
 
         current_node.all_children_seen()
         current_node.update_score(best_value)
         return best_value, best_move
-
-    def minimax_recursion(self, board: Board, depth, current_move, current_best_value, current_best_move, maximizing_player):
-        v, m = self.minimax(board, depth - 1, maximizing_player=not maximizing_player)
-        if maximizing_player:
-            if v > current_best_value:
-                current_best_value, current_best_move = v, current_move
-        else:
-            if v < current_best_value:
-                current_best_value, current_best_move = v, current_move
-        return current_best_value, current_best_move
 
     def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
                   maximizing_player: bool=True) -> CandidateMove:
@@ -586,29 +580,44 @@ class CustomPlayer:
         # TODO: Sort for efficient pruning. This requires knowledge of the previous expansions, because search is depth-first, not breadth-first.
         # TODO: Implement as queue
 
-        player = game.active_player
-        if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, player if maximizing_player else game.inactive_player), None
+        # Fetch the current node. Normally, the node must not be None at this point,
+        # but this assertion breaks the unit tests provided by Udacity.
+        current_node = self.find_node(game)
+        if current_node is None:
+            self.move_registry.clear()
+            current_node = GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+
+        # Termination criterion.
+        if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
+            score = self.score(game, game.active_player if maximizing_player else game.inactive_player)
+            current_node.update_score(score)
+            return score, None
 
         # The infinities ensure that the first result always initializes the fields.
         best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
         best_move = None
 
+        if current_node.has_seen_all_children and not self.is_unit_test:
+            move_branches = ((move, node.board) for move, node in current_node.children())
+        else:
+            move_branches = self.move_branches(game)
+
         # TODO: Maybe move branch to aid prediction
-        for move, branch in self.move_branches(game):
+        for move, branch in move_branches:
             v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
             if maximizing_player:
-                # If the value is better, store it and the move that led to it.
                 if v > best_value:
                     best_value, best_move = v, move
                 alpha = max(alpha, v)  # raise the lower bound
                 if v >= beta:  # TODO: add explanatory comment
                     break
             else:
-                # If the value is better, store it and the move that led to it.
                 if v < best_value:
                     best_value, best_move = v, move
                 beta = min(beta, v)  # lower the upper bound
                 if v <= alpha:  # TODO: add explanatory comment
                     break
+
+        current_node.all_children_seen()
+        current_node.update_score(best_value)
         return best_value, best_move
