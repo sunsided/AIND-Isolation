@@ -70,6 +70,7 @@ def custom_score(game: Board, player: Any) -> float:
     """
 
     # TODO: Strategy: Number of legal moves in two or three rounds assuming the opponent doesn't move
+    # TODO: Strategy: Obtain next moves, then opponent moves, then own moves based on that and opponent again. Reduce opponent.
 
     own_moves = len(game.get_legal_moves(player))  # TODO: that should be the number of childs for the cached node
     if own_moves == 0:
@@ -79,9 +80,8 @@ def custom_score(game: Board, player: Any) -> float:
     if opp_moves == 0:
         return POSITIVE_INFINITY
 
-    own_moves = len(__get_moves_2(game, player))
-
-    return float(own_moves - opp_moves)
+    opp_future_moves = len(__get_moves_2(game, game.get_opponent(player)))
+    return float(own_moves - 2*opp_future_moves)
 
 
 def __get_moves_2(game: Board, player):
@@ -101,7 +101,7 @@ def __get_moves_2(game: Board, player):
     valid_moves = [(r + dr, c + dc) for dr, dc in directions
                    if game.move_is_legal((r + dr, c + dc))]
     shuffle(valid_moves)
-    return valid_moves
+    return set(valid_moves)
 
 
 class GraphEdge(NamedTuple):
