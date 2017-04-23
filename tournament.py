@@ -35,7 +35,6 @@ from sample_players import open_move_score
 
 NUM_MATCHES = 5  # number of matches against each opponent
 TIME_LIMIT = 150  # number of milliseconds before timeout
-#TIME_LIMIT = 1000*1000
 
 TIMEOUT_WARNING = "One or more agents lost a match this round due to " + \
                   "timeout. The get_move() function must return before " + \
