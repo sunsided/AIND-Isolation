@@ -9,8 +9,7 @@ relative strength using tournament.py and include the results in your report.
 
 from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
 from numbers import Number
-from random import random
-from math import isinf
+from random import random, shuffle
 
 from isolation import Board
 
@@ -80,7 +79,29 @@ def custom_score(game: Board, player: Any) -> float:
     if opp_moves == 0:
         return POSITIVE_INFINITY
 
+    own_moves = len(__get_moves_2(game, player))
+
     return float(own_moves - opp_moves)
+
+
+def __get_moves_2(game: Board, player):
+    """Generate the list of possible moves for an L-shaped motion (like a
+    knight in chess).
+    """
+
+    loc = game.get_player_location(player)
+    if loc == Board.NOT_MOVED:
+        return game.get_blank_spaces()
+
+    directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+                  (1, -2), (1, 2), (2, -1), (2, 1)]
+    directions = set(((r + dr, c + dc) for dr, dc in directions for r, c in directions))
+
+    r, c = loc
+    valid_moves = [(r + dr, c + dc) for dr, dc in directions
+                   if game.move_is_legal((r + dr, c + dc))]
+    shuffle(valid_moves)
+    return valid_moves
 
 
 class GraphEdge(NamedTuple):
