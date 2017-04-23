@@ -217,13 +217,18 @@ class GraphNode:
         """Marks this node as tainted, indicating that the outgoing edges need sorting."""
         self._children_need_sorting = True
 
-    def set_age(self, age: int) -> int:
-        """Sets the age of this node and its descendants.
+    def set_age_and_depth(self, age: int, depth: int) -> int:
+        """Updates the age and depth of this node and its descendants. This is triggered by a tree root change.
+        
+        We have to keep in mind that this is a potentially cyclic graph, so deep nodes may point to a node
+        that was already discovered further up the stream on a different branch.
 
         Parameters
         ----------
         age : int
             The new age.
+        depth : int
+            The new depth to set for this node. Descendants will a depth that is higher by 1.
 
         Returns
         -------
@@ -231,24 +236,10 @@ class GraphNode:
             The previous age.
         """
         previous_age, self.age = self.age, age
-        for edge in self._out_edges:
-            edge.bottom.set_age(age)
-        return previous_age
-
-    def set_depth(self, depth: int):
-        """Updates the depth of this node and all descendants. This is triggered by a tree root change.
-        
-        We have to keep in mind that this is a potentially graph, so deep nodes may point to a node
-        that was already discovered further up the stream on a different branch.
-        
-        Parameters
-        ----------
-        depth : int
-            The new depth to set for this node. Descendants will a depth that is higher by 1.
-        """
         self.depth = depth
         for edge in self._out_edges:
-            edge.bottom.set_depth(depth+1)
+            edge.bottom.set_age_and_depth(age, depth+1)
+        return previous_age
 
     @property
     def has_children(self) -> bool:
@@ -308,8 +299,8 @@ class GraphNode:
             for move, node in self.children():
                 yield move, node.board
 
-        all_moves = self.board.get_legal_moves()
-        known_moves = self._moves.keys()
+        all_moves = set(self.board.get_legal_moves())
+        known_moves = set(self._moves.keys())
 
         # We first iteratively explore all moves that we have not yet seen,
         # as they might contain vital information we don't know about.
@@ -370,13 +361,9 @@ class GraphNode:
             The new age of the node and its children. This allows for purging all
             nodes that are not descendants of this node.
         """
-        # Shifting the tree depth, making this node depth zero.
-        if self.depth > 0:
-            log('Root change at age {}'.format(new_age))
-            self.set_depth(0)
-
-        # Painting our children with the new age masks them from purging.
-        threshold_age = self.set_age(new_age)
+        # Shifting the tree depth, making this node depth zero; also
+        # painting our children with the new age masks them from purging.
+        threshold_age = self.set_age_and_depth(new_age, 0)
         # Delete all ancestors, siblings and their children, but not OUR children.
         while len(self._in_edges) > 0:
             edge = self._in_edges.pop()  # type: GraphEdge
@@ -546,7 +533,6 @@ class CustomPlayer:
             # when the timer gets close to expiring
 
             # TODO: Determine the deepest fully explored depth of the Graph and start ID with this depth.
-            print('Cached moves: {}'.format(len(self.move_registry)))
 
             log('Starting search ...')
             if self.iterative:
