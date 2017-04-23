@@ -457,6 +457,8 @@ class CustomPlayer:
         None
             No node was found.
         """
+        if self.is_unit_test:
+            return None
         return self.move_registry.find(game)
 
     def get_move(self, game: Board, legal_moves: List[Position], time_left: TimerFunction) -> Position:
