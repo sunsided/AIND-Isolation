@@ -295,7 +295,7 @@ class GraphNode:
         for edge in self._out_edges:
             yield edge.move, edge.bottom
 
-    def explore_child_boards(self, should_sort: bool=True) -> Iterable[Tuple[Position, Board]]:
+    def explore_child_boards(self) -> Iterable[Tuple[Position, Board]]:
         """Iterates known and unexplored outgoing edges.
         
         If this node is tainted, the outgoing edges will be sorted and the tainted flag will be reset.
@@ -312,23 +312,14 @@ class GraphNode:
         all_moves = self.board.get_legal_moves()
         known_moves = self._moves.keys()
 
-        if should_sort:
-            for move in all_moves:
-                if move in known_moves:
-                    continue
-                branch = self.board.forecast_move(move)
-                self.add_child(move, branch, score=0)
-                yield move, branch
-            for move in (known_moves - all_moves):
-                yield move, self._moves[move].board
-        else:
-            for move in all_moves:
-                if move in known_moves:
-                    yield move, self._moves[move].board
-                    continue
-                branch = self.board.forecast_move(move)
-                self.add_child(move, branch, score=0)
-                yield move, branch
+        for move in all_moves:
+            if move in known_moves:
+                continue
+            branch = self.board.forecast_move(move)
+            self.add_child(move, branch, score=0)
+            yield move, branch
+        for move in (known_moves - all_moves):
+            yield move, self._moves[move].board
 
         self.all_children_seen()
 
@@ -646,7 +637,7 @@ class CustomPlayer:
         best_move = None
 
         # Explore the children
-        for move, branch in current_node.explore_child_boards(should_sort=False):
+        for move, branch in current_node.explore_child_boards():
             # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
             v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
             if maximizing_player:
@@ -725,7 +716,7 @@ class CustomPlayer:
         best_move = None
 
         # TODO: Maybe move branch to aid prediction
-        for move, branch in current_node.explore_child_boards(should_sort=True):
+        for move, branch in current_node.explore_child_boards():
             v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
             if maximizing_player:
                 if v > best_value:
