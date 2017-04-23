@@ -9,6 +9,8 @@ relative strength using tournament.py and include the results in your report.
 
 from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
 from numbers import Number
+from random import random
+from math import isinf
 
 from isolation import Board
 
@@ -68,16 +70,16 @@ def custom_score(game: Board, player: Any) -> float:
         The heuristic value of the current game state to the specified player.
     """
 
-    if game.is_loser(player):
-        return float("-inf")
-
-    if game.is_winner(player):
-        return float("inf")
-
     # TODO: Strategy: Number of legal moves in two or three rounds assuming the opponent doesn't move
 
     own_moves = len(game.get_legal_moves(player))  # TODO: that should be the number of childs for the cached node
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
     opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
     return float(own_moves - opp_moves)
 
 
@@ -301,8 +303,17 @@ class GraphNode:
 
         all_moves = set(self.board.get_legal_moves())
         known_moves = set(self._moves.keys())
+        remaining_moves = set(known_moves - all_moves)
 
-        # We first iteratively explore all moves that we have not yet seen,
+        # First, we'll explore all potentially good and potentially winning moves.
+        for move, node in self.children():
+            if node.score < 0:
+                continue
+            yield move, node.board
+            if move in remaining_moves:
+                remaining_moves.remove(move)
+
+        # We then iteratively explore all moves that we have not yet seen,
         # as they might contain vital information we don't know about.
         for move in all_moves:
             if move in known_moves:
@@ -311,17 +322,17 @@ class GraphNode:
             self.add_child(move, branch)
             yield move, branch
 
-        # After that, we (re-)explore all moves we already know from an
+        self.all_children_seen()
+
+        # After that, we explore all remaining moves we already know from an
         # earlier iteration, while keeping the previously established sorting order.
-        remaining_moves = (known_moves - all_moves)
+        # This should result in exploring potentially bad moves last.
         for move, node in self.children():
             if move not in remaining_moves:
                 continue
             yield move, node.board
 
-        self.all_children_seen()
-
-    def add_child(self, move: Position, branch: Board, score: float = 0) -> 'GraphNode':
+    def add_child(self, move: Position, branch: Board, score: float = random() - .5) -> 'GraphNode':
         """Adds a child to this node.
 
         Parameters
@@ -331,7 +342,9 @@ class GraphNode:
         branch : Board
             The board after the move has been made.
         score : float
-            A utility or heuristics value judging the quality of the move.
+            A utility or heuristics value judging the quality of the move. If unset,
+            the score is initialized to a small random number, increasing it's
+            chance to be explored before already known, possible tie moves (score 0).
             
         Returns
         -------
@@ -427,7 +440,7 @@ class CustomPlayer:
         self.iterative = iterative
         self.score = score_fn  # type: Callable[[Board, Any], float]
         self.time_left = None
-        self.TIMER_THRESHOLD = timeout + 10.
+        self.TIMER_THRESHOLD = timeout + 5.
         self.method = method
 
         self.tree = None  # type: Optional[GraphNode]
@@ -610,13 +623,8 @@ class CustomPlayer:
 
         # TODO: Implement as queue
 
-        # Fetch the current node. Normally, the node must not be None at this point,
-        # but this assertion breaks the unit tests provided by Udacity.
-        current_node = self.find_node(game)
-        if current_node is None:
-            assert self.is_unit_test, 'This assumption should only hold in unit tests.'
-            self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
+        # Fetch the current node.
+        current_node = self.get_current_node(game, depth)
 
         # Debugging output
         log(str(current_node))
@@ -627,22 +635,23 @@ class CustomPlayer:
             current_node.update_score(score)
             return score, None
 
-        # The infinities ensure that the first result always initializes the fields.
-        best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
-        best_move = None
-
         # Explore the children
-        for move, branch in current_node.explore_child_boards():
-            # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
-            v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
-            if maximizing_player:
-                if v > best_value:
+        best_value, best_move = current_node.score, None
+        try:
+            for move, branch in current_node.explore_child_boards():
+                # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
+                v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
+                if best_move is None:
                     best_value, best_move = v, move
-                    current_node.update_score(best_value)
-            else:
-                if v < best_value:
-                    best_value, best_move = v, move
-                    current_node.update_score(best_value)
+                if maximizing_player:
+                    if v > best_value:
+                        best_value, best_move = v, move
+                else:
+                    if v < best_value:
+                        best_value, best_move = v, move
+        finally:
+            if best_move is not None:
+                current_node.update_score(best_value)
 
         return best_value, best_move
 
@@ -689,20 +698,17 @@ class CustomPlayer:
         if self.time_left() < self.TIMER_THRESHOLD:
             raise Timeout()
 
-        # TODO: Sort for efficient pruning. This requires knowledge of the previous expansions, because search is depth-first, not breadth-first.
         # TODO: Implement as queue
 
         # Fetch the current node.
-        # Normally, the node must not be None at this point, but
-        # there are two ways this might fail:
-        # 1) The unit tests provided by Udacity call this method directly, so
-        #    the initialization from the get_move method is missing.
-        # 2) The opponent could have taken a move we did not explore yet.
-        current_node = self.find_node(game)
-        if current_node is None:
-            assert self.is_unit_test, 'This assumption should only hold in unit tests but failed in move {}.'.format(game.move_count)
-            self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
+        current_node = self.get_current_node(game, depth)
+
+        # Cached termination criterion.
+        # TODO: for some reason, this doesn't work.
+        # Checking for isinf(s) works only when the opponent plays optimally.
+        # if current_node.score == POSITIVE_INFINITY:
+        #     assert any(s.bottom.score == POSITIVE_INFINITY for s in current_node._out_edges) or len(current_node._out_edges) == 0
+        #     return current_node.score, None
 
         # Termination criterion.
         if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
@@ -710,26 +716,56 @@ class CustomPlayer:
             current_node.update_score(score)
             return score, None
 
-        # The infinities ensure that the first result always initializes the fields.
-        best_value = NEGATIVE_INFINITY if maximizing_player else POSITIVE_INFINITY
-        best_move = None
-
-        # TODO: Maybe move branch to aid prediction
-        for move, branch in current_node.explore_child_boards():
-            v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
-            if maximizing_player:
-                if v > best_value:
+        # Explore the children.
+        best_value, best_move = current_node.score, None
+        try:
+            for move, branch in current_node.explore_child_boards():
+                v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
+                if best_move is None:
                     best_value, best_move = v, move
-                    current_node.update_score(best_value)
-                alpha = max(alpha, v)  # raise the lower bound
-                if v >= beta:  # TODO: add explanatory comment
-                    break
-            else:
-                if v < best_value:
-                    best_value, best_move = v, move
-                    current_node.update_score(best_value)
-                beta = min(beta, v)  # lower the upper bound
-                if v <= alpha:  # TODO: add explanatory comment
-                    break
+                if maximizing_player:
+                    if v > best_value:
+                        best_value, best_move = v, move
+                    alpha = max(alpha, v)  # raise the lower bound
+                    if v >= beta:  # TODO: add explanatory comment
+                        break
+                else:
+                    if v < best_value:
+                        best_value, best_move = v, move
+                    beta = min(beta, v)  # lower the upper bound
+                    if v <= alpha:  # TODO: add explanatory comment
+                        break
+        finally:
+            if best_move is not None:
+                current_node.update_score(best_value)
 
         return best_value, best_move
+
+    def get_current_node(self, game: Board, depth: int) -> GraphNode:
+        """Obtains the current graph node.
+        
+        Parameters
+        ----------
+        game : Board
+            The current game state.
+        depth : int
+            The current depth.
+            
+        Returns
+        -------
+        GraphNode
+            The current graph node.
+        """
+        # Normally, the node must not be None at this point, but
+        # there are two ways this might fail:
+        # 1) The unit tests provided by Udacity call this method directly, so
+        #    the initialization from the get_move method is missing.
+        # 2) The opponent could have taken a move we did not explore yet.
+        current_node = self.find_node(game)
+        if current_node is None:
+            assert self.is_unit_test, 'This assumption should only hold in unit tests but failed in move {}, depth {} ({}).'.format(
+                game.move_count, depth, self.score)
+            self.move_registry.clear()
+            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
+
+        return current_node
