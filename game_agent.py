@@ -147,8 +147,10 @@ class GraphNodeCache:
 
 class GraphNode:
     """Graph node structure to maintain explored board states."""
+    node_counter = 0
 
-    def __init__(self, registry: GraphNodeCache, branch: Optional[Board], score: float, age: int = 0):
+    def __init__(self, registry: GraphNodeCache, branch: Optional[Board], score: float,
+                 age: int = 0, depth: int = 0, tag: str = 'Root'):
         """
         Parameters
         ----------
@@ -160,24 +162,31 @@ class GraphNode:
             A utility or heuristics value judging the quality of the move.
         age : int
             The current age of the node.
+        tag : str
+            An optional tag used to identify the node.
         """
-        self._in_edges = set()  # type: Set[GraphEdge]
-        self._out_edges = []  # type: List[GraphEdge]
-        self._moves = {}  # type: Dict[Position, GraphNode]
         self.registry = registry
         self.board = branch
         self.score = score
         self.age = age
-        self.tainted = False
+        self.depth = depth
+        self.id = GraphNode.node_counter
+        self.tag = '{} (ID {})'.format(tag, self.id)
+        self._in_edges = set()  # type: Set[GraphEdge]
+        self._out_edges = []  # type: List[GraphEdge]
+        self._moves = {}  # type: Dict[Position, GraphNode]
         self._has_seen_all_children = False
+        self._children_need_sorting = False
+
+        GraphNode.node_counter += 1
         registry.register(self)
 
     def __del__(self):
         self.purge(self.age)
 
     def __str__(self):
-        return 'Node at age {} - score {} - {} ancestors, {} descendants\n{}'\
-            .format(self.age, self.score, len(self._in_edges), len(self._out_edges), self.board.to_string())
+        return '{} (depth {}, age {}, score {}, {} ancestors, {} descendants)'\
+            .format(self.tag or 'None', self.depth, self.age, self.score, len(self._in_edges), len(self._out_edges))
 
     def update_score(self, score: float):
         """Sets the score of this node and marks the ancestors as tainted.
@@ -195,7 +204,7 @@ class GraphNode:
 
     def taint(self):
         """Marks this node as tainted, indicating that the outgoing edges need sorting."""
-        self.tainted = True
+        self._children_need_sorting = True
 
     def set_age(self, age: int) -> int:
         """Sets the age of this node and its descendants.
@@ -214,6 +223,25 @@ class GraphNode:
         for edge in self._out_edges:
             edge.bottom.set_age(age)
         return previous_age
+
+    def set_depth(self, depth: int):
+        """Updates the depth of this node and all descendants. This is triggered by a tree root change.
+        
+        We have to keep in mind that this is a potentially graph, so deep nodes may point to a node
+        that was already discovered further up the stream on a different branch.
+        
+        Parameters
+        ----------
+        depth : int
+            The new depth to set for this node. Descendants will a depth that is higher by 1.
+        """
+        self.depth = depth
+        for edge in self._out_edges:
+            edge.bottom.set_depth(depth+1)
+
+    def log(self, message: str):
+        #print(message)
+        pass
 
     @property
     def has_children(self) -> bool:
@@ -238,7 +266,7 @@ class GraphNode:
         Iterable[Tuple[Position, GraphNode]]
             A move leading to a node.
         """
-        if self.tainted and should_sort:
+        if self._children_need_sorting and should_sort:
             self.sort_children()
         for edge in self._out_edges:
             yield edge.move, edge.bottom
@@ -254,18 +282,30 @@ class GraphNode:
             A move leading to a node.
         """
         if self.has_seen_all_children:
-            return ((move, node.board) for move, node in self.children(should_sort))
+            for move, node in self.children(should_sort):
+                yield move, node.board
 
-        all_moves = set(self.board.get_legal_moves())
+        all_moves = self.board.get_legal_moves()
         known_moves = self._moves.keys()
-        for move in all_moves:
-            if move in known_moves:
-                continue
-            branch = self.board.forecast_move(move)
-            self.add_child(move, branch, score=0.0)
-            yield move, branch
-        for move in (known_moves - all_moves):
-            yield move, self._moves[move].board
+
+        if should_sort:
+            for move in all_moves:
+                if move in known_moves:
+                    continue
+                branch = self.board.forecast_move(move)
+                self.add_child(move, branch, score=0)
+                yield move, branch
+            for move in (known_moves - all_moves):
+                yield move, self._moves[move].board
+        else:
+            for move in all_moves:
+                if move in known_moves:
+                    yield move, self._moves[move].board
+                    continue
+                branch = self.board.forecast_move(move)
+                self.add_child(move, branch, score=0)
+                yield move, branch
+
         self.all_children_seen()
 
     def add_child(self, move: Position, branch: Board, score: float) -> 'GraphNode':
@@ -285,7 +325,8 @@ class GraphNode:
         GraphNode
             The child node.
         """
-        child = self.registry.find(branch) or GraphNode(self.registry, branch, score, self.age)
+        child = self.registry.find(branch) or \
+                GraphNode(self.registry, branch, score, self.age, self.depth + 1, '{} -> {}'.format(self.tag, len(self._out_edges)))
         self._moves[move] = child
         edge = GraphEdge(top=self, bottom=child, move=move)
         child._in_edges.add(edge)
@@ -296,7 +337,7 @@ class GraphNode:
     def sort_children(self):
         """Sorts the children by score in descending order."""
         self._out_edges = sorted(self._out_edges, key=lambda e: -e.bottom.score, reverse=False)
-        self.tainted = False
+        self._children_need_sorting = False
 
     def make_root(self, new_age: int):
         """Makes this node the new root of the graph, purging its ancestors and all unrelated nodes.
@@ -307,6 +348,13 @@ class GraphNode:
             The new age of the node and its children. This allows for purging all
             nodes that are not descendants of this node.
         """
+        # Shifting the tree depth, making this node depth zero.
+        if self.depth > 0:
+            self.log('Root change at age {}'.format(new_age))
+            self.set_depth(0)
+
+        self.tag = 'Root'
+
         # Painting our children with the new age masks them from purging.
         threshold_age = self.set_age(new_age)
         # Delete all ancestors, siblings and their children, but not OUR children.
@@ -383,7 +431,14 @@ class CustomPlayer:
             'The search method {} is not implemented.'.format(method)
 
     @property
-    def is_unit_test(self):
+    def is_unit_test(self) -> bool:
+        """Determines if the code is running under a unit test.
+
+        Returns
+        -------
+        bool
+            True if this test is assumed to run in a unit test; False otherwise.
+        """
         return self.score != custom_score
 
     def find_node(self, game: Board) -> Optional[GraphNode]:
@@ -443,13 +498,16 @@ class CustomPlayer:
         self.time_left = time_left
 
         # Perform any required initializations, including selecting an initial
-        # move from the game board (i.e., an opening book), or returning
+        # move from the game board (i.e., an opening book), or returnin
         # immediately if there are no legal moves
         # TODO: Initializations, opening moves, etc.
 
-        self.tree = self.find_node(game) or \
-                    GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count)
-        self.tree.make_root(game.move_count)
+        self.tree = self.find_node(game)
+        if self.tree is None:
+            # print('Initializing game.')
+            self.tree = GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count, depth=0)
+        else:
+            self.tree.make_root(game.move_count)
 
         best_value, best_move = NEGATIVE_INFINITY, None
         depth = 0
@@ -460,9 +518,14 @@ class CustomPlayer:
             # automatically catch the exception raised by the search method
             # when the timer gets close to expiring
 
+            # TODO: Determine the deepest fully explored depth of the Graph and start ID with this depth.
+            # TODO: Keeping the table of moves breaks the unit test. Overwrite the lookup function if unit test.
+
+            print('Starting search ...')
             if self.iterative:
-                while True:
+                while self.time_left() > self.TIMER_THRESHOLD:
                     depth += 1
+                    print('Beginning iterative deepening with depth {}'.format(depth))
                     v, m = self.search(game, depth=depth, maximizing_player=True)
                     if v > best_value:
                         best_value, best_move = v, m
@@ -472,7 +535,9 @@ class CustomPlayer:
 
         except Timeout:
             # TODO: Handle any actions required at timeout, if necessary
-            # print('Reached depth {} in move {}'.format(depth, game.move_count))
+            pass
+        finally:
+            print('Timeout. Reached depth {} in move {}'.format(depth, game.move_count))
             pass
 
         # Return the best move from the last completed search iteration
@@ -537,8 +602,13 @@ class CustomPlayer:
         # but this assertion breaks the unit tests provided by Udacity.
         current_node = self.find_node(game)
         if current_node is None:
+            assert self.is_unit_test, 'This assumption should only hold in unit tests.'
             self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+            current_node = GraphNode(self.move_registry,
+                                     branch=game, score=0, age=game.move_count, tag='Initialized')
+
+        # Debugging output
+        print(current_node)
 
         # Termination criterion.
         if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
@@ -557,12 +627,12 @@ class CustomPlayer:
             if maximizing_player:
                 if v > best_value:
                     best_value, best_move = v, move
+                    current_node.update_score(best_value)
             else:
                 if v < best_value:
                     best_value, best_move = v, move
+                    current_node.update_score(best_value)
 
-        current_node.all_children_seen()
-        current_node.update_score(best_value)
         return best_value, best_move
 
     def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
@@ -615,8 +685,9 @@ class CustomPlayer:
         # but this assertion breaks the unit tests provided by Udacity.
         current_node = self.find_node(game)
         if current_node is None:
+            assert self.is_unit_test, 'This assumption should only hold in unit tests but failed in move {}.'.format(game.move_count)
             self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=float('nan'), age=game.move_count)
+            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
 
         # Termination criterion.
         if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
@@ -634,16 +705,16 @@ class CustomPlayer:
             if maximizing_player:
                 if v > best_value:
                     best_value, best_move = v, move
+                    current_node.update_score(best_value)
                 alpha = max(alpha, v)  # raise the lower bound
                 if v >= beta:  # TODO: add explanatory comment
                     break
             else:
                 if v < best_value:
                     best_value, best_move = v, move
+                    current_node.update_score(best_value)
                 beta = min(beta, v)  # lower the upper bound
                 if v <= alpha:  # TODO: add explanatory comment
                     break
 
-        current_node.all_children_seen()
-        current_node.update_score(best_value)
         return best_value, best_move
