@@ -21,6 +21,20 @@ TimerFunction = Callable[[], Number]
 NEGATIVE_INFINITY = float("-inf")
 POSITIVE_INFINITY = float("inf")
 
+DEBUG = False
+
+
+def log(message: str):
+    """Prints logging information if debugging is enabled.
+
+    Parameters
+    ----------
+    message : str
+        The message to print.
+    """
+    if DEBUG:
+        print(message)
+
 
 class Timeout(Exception):
     """Subclass base exception for code clarity."""
@@ -239,17 +253,27 @@ class GraphNode:
         for edge in self._out_edges:
             edge.bottom.set_depth(depth+1)
 
-    def log(self, message: str):
-        #print(message)
-        pass
-
     @property
     def has_children(self) -> bool:
+        """Determines if this node has children.
+
+        Returns
+        -------
+        bool
+            True if this node has children; False otherwise.
+        """
         return len(self._out_edges) > 0
 
     @property
     def has_seen_all_children(self) -> bool:
-        """Determines if all children were discovered."""
+        """Determines if all children were discovered.
+        
+        Returns
+        -------
+        bool
+            True if all children of this node have been explored (at this depth); False if
+            there are (possibly) unseen children.
+        """
         return self._has_seen_all_children
 
     def all_children_seen(self):
@@ -326,7 +350,8 @@ class GraphNode:
             The child node.
         """
         child = self.registry.find(branch) or \
-                GraphNode(self.registry, branch, score, self.age, self.depth + 1, '{} -> {}'.format(self.tag, len(self._out_edges)))
+                GraphNode(self.registry, branch, score, self.age, self.depth + 1,
+                          tag='{} -> {}'.format(self.tag, len(self._out_edges)))
         self._moves[move] = child
         edge = GraphEdge(top=self, bottom=child, move=move)
         child._in_edges.add(edge)
@@ -350,7 +375,7 @@ class GraphNode:
         """
         # Shifting the tree depth, making this node depth zero.
         if self.depth > 0:
-            self.log('Root change at age {}'.format(new_age))
+            log('Root change at age {}'.format(new_age))
             self.set_depth(0)
 
         self.tag = 'Root'
@@ -457,9 +482,7 @@ class CustomPlayer:
         None
             No node was found.
         """
-        if self.is_unit_test:
-            return None
-        return self.move_registry.find(game)
+        return self.move_registry.find(game) if not self.is_unit_test else None
 
     def get_move(self, game: Board, legal_moves: List[Position], time_left: TimerFunction) -> Position:
         """Search for the best move from the available legal moves and return a
@@ -506,7 +529,7 @@ class CustomPlayer:
 
         self.tree = self.find_node(game)
         if self.tree is None:
-            # print('Initializing game.')
+            log('Initializing game.')
             self.tree = GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count, depth=0)
         else:
             self.tree.make_root(game.move_count)
@@ -523,11 +546,11 @@ class CustomPlayer:
             # TODO: Determine the deepest fully explored depth of the Graph and start ID with this depth.
             # TODO: Keeping the table of moves breaks the unit test. Overwrite the lookup function if unit test.
 
-            print('Starting search ...')
+            log('Starting search ...')
             if self.iterative:
                 while self.time_left() > self.TIMER_THRESHOLD:
                     depth += 1
-                    print('Beginning iterative deepening with depth {}'.format(depth))
+                    log('Beginning iterative deepening with depth {}'.format(depth))
                     v, m = self.search(game, depth=depth, maximizing_player=True)
                     if v > best_value:
                         best_value, best_move = v, m
@@ -539,7 +562,7 @@ class CustomPlayer:
             # TODO: Handle any actions required at timeout, if necessary
             pass
         finally:
-            print('Timeout. Reached depth {} in move {}'.format(depth, game.move_count))
+            log('Timeout. Reached depth {} in move {}'.format(depth, game.move_count))
             pass
 
         # Return the best move from the last completed search iteration
@@ -610,7 +633,7 @@ class CustomPlayer:
                                      branch=game, score=0, age=game.move_count, tag='Initialized')
 
         # Debugging output
-        print(current_node)
+        log(current_node)
 
         # Termination criterion.
         if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
