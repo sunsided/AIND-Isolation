@@ -118,11 +118,11 @@ class GraphNodeCache:
         self._registry = {}  # type: Dict[int, GraphNode]
 
     @staticmethod
-    def _hash(board: Board):
+    def key(board: Board):
         # Udacity's provided implementation hashes on strings generated from lists ...
         # I feel bad for directly accessing that field, but speed matters here and I
         # can't change the interface.
-        return hash(tuple(board._board_state))
+        return tuple(board._board_state)
 
     def clear(self):
         """Clears the registry."""
@@ -145,7 +145,7 @@ class GraphNodeCache:
         """
 
         # TODO: It might be interesting to also check for symmetric states, e.g. rotations and transposes.
-        key = self._hash(branch)
+        key = self.key(branch)
         # return self._registry[key] if key in self._registry else None
         try:
             return self._registry[key]
@@ -161,7 +161,7 @@ class GraphNodeCache:
             The node to register.
         """
         assert node.board is not None
-        key = self._hash(node.board)
+        key = self.key(node.board)
         # assert key not in self._registry -- assumes no custom behavior for unit tests
         self._registry[key] = node
 
@@ -174,7 +174,7 @@ class GraphNodeCache:
             The graph node to remove.
         """
         assert node.board is not None
-        key = self._hash(node.board)
+        key = self.key(node.board)
         if key in self._registry:
             del self._registry[key]
 
