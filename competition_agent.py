@@ -4,10 +4,9 @@ champions) in a tournament.
 
          COMPLETING AND SUBMITTING A COMPETITION AGENT IS OPTIONAL
 """
-from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
+from typing import Callable, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
 from numbers import Number
-from random import random
-from math import isinf
+import random
 
 from isolation import Board
 
@@ -71,7 +70,30 @@ def custom_score(game, player):
     if opp_moves == 0:
         return POSITIVE_INFINITY
 
-    return float(own_moves - opp_moves)
+    p1 = game.get_player_location(game.active_player)
+    p2 = game.get_player_location(game.get_opponent(player))
+    dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+
+    opp_future_moves = len(__get_moves_2(game, game.get_opponent(player)))
+    return float(own_moves - 2 * opp_future_moves - dist)
+
+
+def __get_moves_2(game, player):
+    """Generate the list of possible moves for an L-shaped motion (like a
+    knight in chess).
+    """
+
+    loc = game.get_player_location(player)
+
+    directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+                  (1, -2), (1, 2), (2, -1), (2, 1)]
+    directions = set(((r + dr, c + dc) for dr, dc in directions for r, c in directions))
+
+    r, c = loc
+    valid_moves = [(r + dr, c + dc) for dr, dc in directions
+                   if game.move_is_legal((r + dr, c + dc))]
+    random.shuffle(valid_moves)
+    return set(valid_moves)
 
 
 class GraphEdge(NamedTuple):
@@ -323,7 +345,7 @@ class GraphNode:
                 continue
             yield move, node.board
 
-    def add_child(self, move: Position, branch: Board, score: float = random() - .5) -> 'GraphNode':
+    def add_child(self, move: Position, branch: Board, score: float = 0.) -> 'GraphNode':
         """Adds a child to this node.
 
         Parameters
@@ -426,20 +448,6 @@ class CustomPlayer:
         self.tree = None  # type: Optional[GraphNode]
         self.move_registry = GraphNodeCache()
 
-    @property
-    def is_unit_test(self) -> bool:
-        """Determines if the code is running under a unit test.
-
-        Returns
-        -------
-        bool
-            True if this test is assumed to run in a unit test; False otherwise.
-        """
-        if self.score == custom_score:
-            return False
-        name = str(self.score)
-        return 'test' in name or 'Eval' in name
-
     def find_node(self, game: Board) -> Optional[GraphNode]:
         """Attempts to find the node belonging to the specified game state.
 
@@ -461,7 +469,7 @@ class CustomPlayer:
         None
             No node was found.
         """
-        return self.move_registry.find(game) if not self.is_unit_test else None
+        return self.move_registry.find(game)
 
     def get_move(self, game, time_left):
         """Search for the best move from the available legal moves and return a
@@ -490,6 +498,7 @@ class CustomPlayer:
             Board coordinates corresponding to a legal move; may return
             (-1, -1) if there are no available legal moves.
         """
+        self.time_left = time_left
 
         self.tree = self.find_node(game)
         if self.tree is None:
@@ -512,7 +521,7 @@ class CustomPlayer:
             while self.time_left() > self.TIMER_THRESHOLD:
                 depth += 1
                 log('Beginning iterative deepening with depth {}'.format(depth))
-                best_move = self.alphabeta(game, depth=depth, maximizing_player=True)
+                _, best_move = self.alphabeta(game, depth=depth, maximizing_player=True)
 
         except SearchTimeout:
             # TODO: Handle any actions required at timeout, if necessary
@@ -521,7 +530,7 @@ class CustomPlayer:
             log('Timeout. Reached depth {} in move {}'.format(depth, game.move_count))
 
         # Return the best move from the last completed search iteration
-        return best_move
+        return best_move or (-1, -1)
 
     def alphabeta(self, game: Board, depth: int, alpha: float = float("-inf"), beta: float = float("inf"),
                   maximizing_player: bool = True) -> CandidateMove:
@@ -596,13 +605,13 @@ class CustomPlayer:
                     if v > best_value:
                         best_value, best_move = v, move
                     alpha = max(alpha, v)  # raise the lower bound
-                    if v >= beta:  # TODO: add explanatory comment
+                    if v >= beta:
                         break
                 else:
                     if v < best_value:
                         best_value, best_move = v, move
                     beta = min(beta, v)  # lower the upper bound
-                    if v <= alpha:  # TODO: add explanatory comment
+                    if v <= alpha:
                         break
         finally:
             if best_move is not None:
@@ -631,10 +640,5 @@ class CustomPlayer:
         #    the initialization from the get_move method is missing.
         # 2) The opponent could have taken a move we did not explore yet.
         current_node = self.find_node(game)
-        if current_node is None:
-            assert self.is_unit_test, 'This assumption should only hold in unit tests but failed in move {}, depth {} ({}).'.format(
-                game.move_count, depth, self.score)
-            self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
-
+        assert current_node is not None
         return current_node
