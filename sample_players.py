@@ -1,5 +1,9 @@
 """This file contains a collection of player classes for comparison with your
 own agent and example heuristic functions.
+
+    ************************************************************************
+    ***********  YOU DO NOT NEED TO MODIFY ANYTHING IN THIS FILE  **********
+    ************************************************************************
 """
 
 from random import randint
@@ -96,10 +100,43 @@ def improved_score(game, player):
     return float(own_moves - opp_moves)
 
 
-class RandomPlayer:
+def center_score(game, player):
+    """Outputs a score equal to square of the distance from the center of the
+    board to the position of the player.
+
+    This heuristic is only used by the autograder for testing.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : hashable
+        One of the objects registered by the game object as a valid player.
+        (i.e., `player` should be either game.__player_1__ or
+        game.__player_2__).
+
+    Returns
+    ----------
+    float
+        The heuristic value of the current game state
+    """
+    if game.is_loser(player):
+        return float("-inf")
+
+    if game.is_winner(player):
+        return float("inf")
+
+    w, h = game.width / 2., game.height / 2.
+    y, x = game.get_player_location(player)
+    return float((h - y)**2 + (w - x)**2)
+
+
+class RandomPlayer():
     """Player that chooses a move randomly."""
 
-    def get_move(self, game, legal_moves, time_left):
+    def get_move(self, game, time_left):
         """Randomly select a move from the available legal moves.
 
         Parameters
@@ -107,10 +144,6 @@ class RandomPlayer:
         game : `isolation.Board`
             An instance of `isolation.Board` encoding the current state of the
             game (e.g., player locations and blocked cells).
-
-        legal_moves : list<(int, int)>
-            A list containing legal moves. Moves are encoded as tuples of pairs
-            of ints defining the next (row, col) for the agent to occupy.
 
         time_left : callable
             A function that returns the number of milliseconds left in the
@@ -123,7 +156,7 @@ class RandomPlayer:
             A randomly selected legal move; may return (-1, -1) if there are
             no available legal moves.
         """
-
+        legal_moves = game.get_legal_moves()
         if not legal_moves:
             return (-1, -1)
         return legal_moves[randint(0, len(legal_moves) - 1)]
@@ -137,7 +170,7 @@ class GreedyPlayer():
     def __init__(self, score_fn=open_move_score):
         self.score = score_fn
 
-    def get_move(self, game, legal_moves, time_left):
+    def get_move(self, game, time_left):
         """Select the move from the available legal moves with the highest
         heuristic score.
 
@@ -146,10 +179,6 @@ class GreedyPlayer():
         game : `isolation.Board`
             An instance of `isolation.Board` encoding the current state of the
             game (e.g., player locations and blocked cells).
-
-        legal_moves : list<(int, int)>
-            A list containing legal moves. Moves are encoded as tuples of pairs
-            of ints defining the next (row, col) for the agent to occupy.
 
         time_left : callable
             A function that returns the number of milliseconds left in the
@@ -163,7 +192,7 @@ class GreedyPlayer():
             for the current game state; may return (-1, -1) if there are no
             legal moves.
         """
-
+        legal_moves = game.get_legal_moves()
         if not legal_moves:
             return (-1, -1)
         _, move = max([(self.score(game.forecast_move(m), self), m) for m in legal_moves])
@@ -173,7 +202,7 @@ class GreedyPlayer():
 class HumanPlayer():
     """Player that chooses a move according to user's input."""
 
-    def get_move(self, game, legal_moves, time_left):
+    def get_move(self, game, time_left):
         """
         Select a move from the available legal moves based on user input at the
         terminal.
@@ -189,10 +218,6 @@ class HumanPlayer():
             An instance of `isolation.Board` encoding the current state of the
             game (e.g., player locations and blocked cells).
 
-        legal_moves : list<(int, int)>
-            A list containing legal moves. Moves are encoded as tuples of pairs
-            of ints defining the next (row, col) for the agent to occupy.
-
         time_left : callable
             A function that returns the number of milliseconds left in the
             current turn. Returning with any less than 0 ms remaining forfeits
@@ -205,9 +230,11 @@ class HumanPlayer():
             terminal prompt; automatically return (-1, -1) if there are no
             legal moves
         """
+        legal_moves = game.get_legal_moves()
         if not legal_moves:
             return (-1, -1)
 
+        print(game.to_string()) #display the board for the human player
         print(('\t'.join(['[%d] %s' % (i, str(move)) for i, move in enumerate(legal_moves)])))
 
         valid_choice = False
@@ -235,13 +262,13 @@ if __name__ == "__main__":
 
     # place player 1 on the board at row 2, column 3, then place player 2 on
     # the board at row 0, column 5; display the resulting board state.  Note
-    # that .apply_move() changes the calling object
+    # that the .apply_move() method changes the calling object in-place.
     game.apply_move((2, 3))
     game.apply_move((0, 5))
     print(game.to_string())
 
     # players take turns moving on the board, so player1 should be next to move
-    assert (player1 == game.active_player)
+    assert(player1 == game.active_player)
 
     # get a list of the legal moves available to the active player
     print(game.get_legal_moves())
@@ -250,12 +277,12 @@ if __name__ == "__main__":
     # applying a move. Notice that this does NOT change the calling object
     # (unlike .apply_move()).
     new_game = game.forecast_move((1, 1))
-    assert (new_game.to_string() != game.to_string())
+    assert(new_game.to_string() != game.to_string())
     print("\nOld state:\n{}".format(game.to_string()))
     print("\nNew state:\n{}".format(new_game.to_string()))
 
     # play the remainder of the game automatically -- outcome can be "illegal
-    # move" or "timeout"; it should _always_ be "illegal move" in this example
+    # move", "timeout", or "forfeit"
     winner, history, outcome = game.play()
     print("\nWinner: {}\nOutcome: {}".format(winner, outcome))
     print(game.to_string())

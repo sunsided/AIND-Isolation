@@ -1,57 +1,26 @@
-"""This file contains all the classes you must complete for this project.
-
-You can use the test cases in agent_test.py to help during development, and
-augment the test suite with your own test cases to further test your code.
-
-You must test your agent's strength against a set of agents with known
-relative strength using tournament.py and include the results in your report.
+"""Finish all TODO items in this file to complete the isolation project, then
+test your agent's strength against a set of known agents using tournament.py
+and include the results in your report.
 """
-
-from typing import Callable, Any, Tuple, List, Optional, Iterable, NamedTuple, Dict, Set
-from numbers import Number
-from random import random, shuffle
-
-from isolation import Board
-
-
-Score = float
-Position = Tuple[int, int]
-CandidateMove = Tuple[Score, Optional[Position]]
-TimerFunction = Callable[[], Number]
+import random
 
 NEGATIVE_INFINITY = float("-inf")
 POSITIVE_INFINITY = float("inf")
 
-DEBUG = False
 
-
-def log(message: str):
-    """Prints logging information if debugging is enabled.
-
-    Parameters
-    ----------
-    message : str
-        The message to print.
-    """
-    if DEBUG:
-        print(message)
-
-
-class Timeout(Exception):
-    """Subclass base exception for code clarity."""
+class SearchTimeout(Exception):
+    """Subclass base exception for code clarity. """
     pass
 
 
-def custom_score(game: Board, player: Any) -> float:
+def custom_score(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
 
+    This should be the best heuristic function for your project submission.
+
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
-
-    This is the "improved" evaluation function discussed in lecture that outputs a
-    score equal to the difference in the number of moves available to the
-    two players.
 
     Parameters
     ----------
@@ -68,11 +37,7 @@ def custom_score(game: Board, player: Any) -> float:
     float
         The heuristic value of the current game state to the specified player.
     """
-
-    # TODO: Strategy: Number of legal moves in two or three rounds assuming the opponent doesn't move
-    # TODO: Strategy: Obtain next moves, then opponent moves, then own moves based on that and opponent again. Reduce opponent.
-
-    own_moves = len(game.get_legal_moves(player))  # TODO: that should be the number of childs for the cached node
+    own_moves = len(game.get_legal_moves(player))
     if own_moves == 0:
         return NEGATIVE_INFINITY
 
@@ -84,14 +49,87 @@ def custom_score(game: Board, player: Any) -> float:
     return float(own_moves - 2*opp_future_moves)
 
 
-def __get_moves_2(game: Board, player):
+def custom_score_2(game, player):
+    """Calculate the heuristic value of a game state from the point of view
+    of the given player.
+
+    Note: this function should be called from within a Player instance as
+    `self.score()` -- you should not need to call this function directly.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    own_moves = len(game.get_legal_moves(player))
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
+    p1 = game.get_player_location(game.active_player)
+    p2 = game.get_player_location(game.get_opponent(player))
+    dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+
+    return float(own_moves - 2 * opp_moves - dist)
+
+
+def custom_score_3(game, player):
+    """Calculate the heuristic value of a game state from the point of view
+    of the given player.
+
+    Note: this function should be called from within a Player instance as
+    `self.score()` -- you should not need to call this function directly.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    own_moves = len(game.get_legal_moves(player))
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
+    p1 = game.get_player_location(game.active_player)
+    p2 = game.get_player_location(game.get_opponent(player))
+    dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+
+    opp_future_moves = len(__get_moves_2(game, game.get_opponent(player)))
+    return float(own_moves - 2 * opp_future_moves - dist)
+
+
+def __get_moves_2(game, player):
     """Generate the list of possible moves for an L-shaped motion (like a
     knight in chess).
     """
 
     loc = game.get_player_location(player)
-    if loc == Board.NOT_MOVED:
-        return game.get_blank_spaces()
 
     directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
                   (1, -2), (1, 2), (2, -1), (2, 1)]
@@ -100,335 +138,34 @@ def __get_moves_2(game: Board, player):
     r, c = loc
     valid_moves = [(r + dr, c + dc) for dr, dc in directions
                    if game.move_is_legal((r + dr, c + dc))]
-    shuffle(valid_moves)
+    random.shuffle(valid_moves)
     return set(valid_moves)
 
 
-class GraphEdge(NamedTuple):
-    """An edge describing a move to get from one node to another."""
-    top: 'GraphNode'
-    bottom: 'GraphNode'
-    move: Position
+def move_branches(game):
+    """
+    Determines the legal moves in the current state, creates branches and yields them.
+
+    Parameters
+    ----------
+    game : isolation.Board
+        An instance of the Isolation game `Board` class representing the
+        current game state
+
+    Returns
+    -------
+    Iterable[Position, Board]
+        The moves and their respective branch of the board.
+    """
+    for m in game.get_legal_moves(game.active_player):
+        yield m, game.forecast_move(m)
 
 
-class GraphNodeCache:
-    """Cache for already seen board states."""
+class IsolationPlayer:
+    """Base class for minimax and alphabeta agents -- this class is never
+    constructed or tested directly.
 
-    def __init__(self):
-        self._registry = {}  # type: Dict[int, GraphNode]
-
-    @staticmethod
-    def key(board: Board):
-        # Udacity's provided implementation hashes on strings generated from lists ...
-        # I feel bad for directly accessing that field, but speed matters here and I
-        # can't change the interface.
-        return tuple(board._board_state)
-
-    def clear(self):
-        """Clears the registry."""
-        self._registry.clear()
-
-    def find(self, branch: Board) -> Optional['GraphNode']:
-        """Attempts to find a graph node given a board state.
-
-        Parameters
-        ----------
-        branch : Board
-            The branch node to explore.
-
-        Returns
-        -------
-        GraphNode
-            The cached node.
-        None
-            No cached node existed.
-        """
-
-        # TODO: It might be interesting to also check for symmetric states, e.g. rotations and transposes.
-        key = self.key(branch)
-        # return self._registry[key] if key in self._registry else None
-        try:
-            return self._registry[key]
-        except KeyError:
-            return None
-
-    def register(self, node: 'GraphNode'):
-        """Registers a new node with the cache.
-
-        Parameters
-        ----------
-        node : GraphNode
-            The node to register.
-        """
-        assert node.board is not None
-        key = self.key(node.board)
-        # assert key not in self._registry -- assumes no custom behavior for unit tests
-        self._registry[key] = node
-
-    def deregister(self, node: 'GraphNode'):
-        """Deregisters an existing node from the cache.
-
-        Parameters
-        ----------
-        node : GraphNode
-            The graph node to remove.
-        """
-        assert node.board is not None
-        key = self.key(node.board)
-        if key in self._registry:
-            del self._registry[key]
-
-    def __len__(self):
-        return len(self._registry)
-
-
-class GraphNode:
-    """Graph node structure to maintain explored board states."""
-    node_counter = 0
-
-    def __init__(self, registry: GraphNodeCache, branch: Optional[Board], score: float,
-                 age: int = 0, depth: int = 0):
-        """
-        Parameters
-        ----------
-        registry : GraphNodeCache
-            A registry used for caching already explored board states and their corresponding node.       
-        branch : Board
-            The board state described by this node.
-        score : float
-            A utility or heuristics value judging the quality of the move.
-        age : int
-            The current age of the node.
-        """
-        self.registry = registry
-        self.board = branch
-        self.score = score
-        self.age = age
-        self.depth = depth
-        self.id = GraphNode.node_counter
-        self._in_edges = set()  # type: Set[GraphEdge]
-        self._out_edges = []  # type: List[GraphEdge]
-        self._moves = {}  # type: Dict[Position, GraphNode]
-        self._has_seen_all_children = False
-        self._children_need_sorting = False
-
-        GraphNode.node_counter += 1
-        registry.register(self)
-
-    def __del__(self):
-        self.purge(self.age)
-
-    def __str__(self):
-        return 'Depth {}, age {}, score {}, {} ancestors, {} descendants'\
-            .format(self.depth, self.age, self.score, len(self._in_edges), len(self._out_edges))
-
-    def update_score(self, score: float):
-        """Sets the score of this node and marks the ancestors as tainted.
-        
-        Parameters
-        ----------
-        score : float
-            The new score.
-        """
-        if self.score == score:
-            return
-        self.score = score
-        for edge in self._in_edges:
-            edge.top.taint()
-
-    def taint(self):
-        """Marks this node as tainted, indicating that the outgoing edges need sorting."""
-        self._children_need_sorting = True
-
-    def set_age_and_depth(self, age: int, depth: int) -> int:
-        """Updates the age and depth of this node and its descendants. This is triggered by a tree root change.
-        
-        We have to keep in mind that this is a potentially cyclic graph, so deep nodes may point to a node
-        that was already discovered further up the stream on a different branch.
-
-        Parameters
-        ----------
-        age : int
-            The new age.
-        depth : int
-            The new depth to set for this node. Descendants will a depth that is higher by 1.
-
-        Returns
-        -------
-        int
-            The previous age.
-        """
-        previous_age, self.age = self.age, age
-        self.depth = depth
-        for edge in self._out_edges:
-            edge.bottom.set_age_and_depth(age, depth+1)
-        return previous_age
-
-    @property
-    def has_children(self) -> bool:
-        """Determines if this node has children.
-
-        Returns
-        -------
-        bool
-            True if this node has children; False otherwise.
-        """
-        return len(self._out_edges) > 0
-
-    @property
-    def has_seen_all_children(self) -> bool:
-        """Determines if all children were discovered.
-        
-        Returns
-        -------
-        bool
-            True if all children of this node have been explored (at this depth); False if
-            there are (possibly) unseen children.
-        """
-        return self._has_seen_all_children
-
-    def all_children_seen(self):
-        """Marks that all children were discovered."""
-        self._has_seen_all_children = True
-
-    def children(self, should_sort: bool=True) -> Iterable[Tuple[Position, 'GraphNode']]:
-        """Iterates the outgoing edges. 
-        
-        If this node is tainted, the outgoing edges will be sorted and the tainted flag will be reset.
-
-        Returns
-        -------
-        Iterable[Tuple[Position, GraphNode]]
-            A move leading to a node.
-        """
-        if self._children_need_sorting and should_sort:
-            self.sort_children()
-        for edge in self._out_edges:
-            yield edge.move, edge.bottom
-
-    def explore_child_boards(self) -> Iterable[Tuple[Position, Board]]:
-        """Iterates known and unexplored outgoing edges.
-        
-        If this node is tainted, the outgoing edges will be sorted and the tainted flag will be reset.
-        The behavior in this method can be optimized if it is known that search will always
-        use iterative deepening, which is not true given the unit tests.
-
-        Returns
-        -------
-        Iterable[Tuple[bool, Position, GraphNode]]
-            A move leading to a node.
-        """
-        if self.has_seen_all_children:
-            for move, node in self.children():
-                yield move, node.board
-
-        all_moves = set(self.board.get_legal_moves())
-        known_moves = set(self._moves.keys())
-        remaining_moves = set(known_moves - all_moves)
-
-        # First, we'll explore all potentially good and potentially winning moves.
-        for move, node in self.children():
-            if node.score < 0:
-                continue
-            yield move, node.board
-            if move in remaining_moves:
-                remaining_moves.remove(move)
-
-        # We then iteratively explore all moves that we have not yet seen,
-        # as they might contain vital information we don't know about.
-        for move in all_moves:
-            if move in known_moves:
-                continue
-            branch = self.board.forecast_move(move)
-            self.add_child(move, branch)
-            yield move, branch
-
-        self.all_children_seen()
-
-        # After that, we explore all remaining moves we already know from an
-        # earlier iteration, while keeping the previously established sorting order.
-        # This should result in exploring potentially bad moves last.
-        for move, node in self.children():
-            if move not in remaining_moves:
-                continue
-            yield move, node.board
-
-    def add_child(self, move: Position, branch: Board, score: float = random() - .5) -> 'GraphNode':
-        """Adds a child to this node.
-
-        Parameters
-        ----------
-        move : Position
-            The move that resulted in the new child.
-        branch : Board
-            The board after the move has been made.
-        score : float
-            A utility or heuristics value judging the quality of the move. If unset,
-            the score is initialized to a small random number, increasing it's
-            chance to be explored before already known, possible tie moves (score 0).
-            
-        Returns
-        -------
-        GraphNode
-            The child node.
-        """
-        child = self.registry.find(branch) or \
-            GraphNode(self.registry, branch, score, self.age, self.depth + 1)
-        self._moves[move] = child
-        edge = GraphEdge(top=self, bottom=child, move=move)
-        child._in_edges.add(edge)
-        self._out_edges.append(edge)
-        self.taint()
-        return child
-
-    def sort_children(self):
-        """Sorts the children by score in descending order."""
-        self._out_edges = sorted(self._out_edges, key=lambda e: -e.bottom.score, reverse=False)
-        self._children_need_sorting = False
-
-    def make_root(self, new_age: int):
-        """Makes this node the new root of the graph, purging its ancestors and all unrelated nodes.
-
-        Parameters
-        ----------
-        new_age : int
-            The new age of the node and its children. This allows for purging all
-            nodes that are not descendants of this node.
-        """
-        # Shifting the tree depth, making this node depth zero; also
-        # painting our children with the new age masks them from purging.
-        threshold_age = self.set_age_and_depth(new_age, 0)
-        # Delete all ancestors, siblings and their children, but not OUR children.
-        while len(self._in_edges) > 0:
-            edge = self._in_edges.pop()  # type: GraphEdge
-            edge.top.purge(threshold_age)
-
-    def purge(self, threshold_age: int):
-        """Removes this node from the graph, while also purging its ancestors and children.
-
-        Parameters
-        ---------
-        threshold_age : int
-            The age below which this node is purged. If the node is older than this number,
-            it will not be purged and also not propagate the wave.
-        """
-        if self.age > threshold_age or self.board is None:
-            return
-        self.registry.deregister(self)
-        self.board = None
-        while len(self._in_edges) > 0:
-            edge = self._in_edges.pop()  # type: GraphEdge
-            edge.top.purge(threshold_age)
-        while len(self._out_edges) > 0:
-            edge = self._out_edges.pop()  # type: GraphEdge
-            edge.bottom.purge(threshold_age)
-
-
-class CustomPlayer:
-    """Game-playing agent that chooses a move using your evaluation function
-    and a depth-limited minimax algorithm with alpha-beta pruning. You must
-    finish and test this player to make sure it properly uses minimax and
-    alpha-beta to return a good move before the search time limit expires.
+    ********************  DO NOT MODIFY THIS CLASS  ********************
 
     Parameters
     ----------
@@ -436,101 +173,45 @@ class CustomPlayer:
         A strictly positive integer (i.e., 1, 2, 3,...) for the number of
         layers in the game tree to explore for fixed-depth search. (i.e., a
         depth of one (1) would only explore the immediate sucessors of the
-        current state.)  This parameter should be ignored when iterative = True.
+        current state.)
 
     score_fn : callable (optional)
         A function to use for heuristic evaluation of game states.
-
-    iterative : boolean (optional)
-        Flag indicating whether to perform fixed-depth search (False) or
-        iterative deepening search (True).  When True, search_depth should
-        be ignored and no limit to search depth.
-
-    method : {'minimax', 'alphabeta'} (optional)
-        The name of the search method to use in get_move().
 
     timeout : float (optional)
         Time remaining (in milliseconds) when search is aborted. Should be a
         positive value large enough to allow the function to return before the
         timer expires.
     """
-
-    def __init__(self, search_depth: int=3, score_fn: Callable[[Board, Any], float]=custom_score,
-                 iterative: bool=True, method: str='minimax', timeout: float=10.):
+    def __init__(self, search_depth=3, score_fn=custom_score, timeout=10.):
         self.search_depth = search_depth
-        self.iterative = iterative
-        self.score = score_fn  # type: Callable[[Board, Any], float]
+        self.score = score_fn
         self.time_left = None
-        self.TIMER_THRESHOLD = timeout + 5.
-        self.method = method
+        self.TIMER_THRESHOLD = timeout
 
-        self.tree = None  # type: Optional[GraphNode]
-        self.move_registry = GraphNodeCache()
 
-        self.search = self.minimax if method == 'minimax' else self.alphabeta
-        assert method == 'minimax' or method == 'alphabeta', \
-            'The search method {} is not implemented.'.format(method)
+class MinimaxPlayer(IsolationPlayer):
+    """Game-playing agent that chooses a move using depth-limited minimax
+    search. You must finish and test this player to make sure it properly uses
+    minimax to return a good move before the search time limit expires.
+    """
 
-    @property
-    def is_unit_test(self) -> bool:
-        """Determines if the code is running under a unit test.
-
-        Returns
-        -------
-        bool
-            True if this test is assumed to run in a unit test; False otherwise.
-        """
-        if self.score == custom_score:
-            return False
-        name = str(self.score)
-        return 'test' in name or 'Eval' in name
-
-    def find_node(self, game: Board) -> Optional[GraphNode]:
-        """Attempts to find the node belonging to the specified game state.
-        
-        This function always returns None if `is_unit_test` returns True.
-        This is because the test_get_move unit test expects the implementation
-        to search all the nodes explicitly, regardless if the board state was
-        already seen in a different tree or not.
-        
-        Parameters
-        ----------
-        game : `isolation.Board`
-            An instance of `isolation.Board` encoding the current state of the
-            game (e.g., player locations and blocked cells).
-            
-        Returns
-        -------
-        GraphNode
-            The node.
-        None
-            No node was found.
-        """
-        return self.move_registry.find(game) if not self.is_unit_test else None
-
-    def get_move(self, game: Board, legal_moves: List[Position], time_left: TimerFunction) -> Position:
+    def get_move(self, game, time_left):
         """Search for the best move from the available legal moves and return a
         result before the time limit expires.
 
-        This function must perform iterative deepening if self.iterative=True,
-        and it must use the search method (minimax or alphabeta) corresponding
-        to the self.method value.
+        **************  YOU DO NOT NEED TO MODIFY THIS FUNCTION  *************
 
-        **********************************************************************
-        NOTE: If time_left < 0 when this function returns, the agent will
-              forfeit the game due to timeout. You must return _before_ the
-              timer reaches 0.
-        **********************************************************************
+        For fixed-depth search, this function simply wraps the call to the
+        minimax method, but this method provides a common interface for all
+        Isolation agents, and you will replace it in the AlphaBetaPlayer with
+        iterative deepening search.
 
         Parameters
         ----------
         game : `isolation.Board`
             An instance of `isolation.Board` encoding the current state of the
             game (e.g., player locations and blocked cells).
-
-        legal_moves : list<(int, int)>
-            DEPRECATED -- This argument will be removed in the next release.
-            Corresponds to the result of board.get_legal_moves().
 
         time_left : callable
             A function that returns the number of milliseconds left in the
@@ -543,73 +224,30 @@ class CustomPlayer:
             Board coordinates corresponding to a legal move; may return
             (-1, -1) if there are no available legal moves.
         """
-
         self.time_left = time_left
 
-        # Perform any required initializations, including selecting an initial
-        # move from the game board (i.e., an opening book), or returnin
-        # immediately if there are no legal moves
-        # TODO: Initializations, opening moves, etc.
-
-        self.tree = self.find_node(game)
-        if self.tree is None:
-            self.tree = GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count, depth=0)
-        else:
-            self.tree.make_root(game.move_count)
-
-        best_value, best_move = NEGATIVE_INFINITY, None
-        depth = 0
-
         try:
-            # The search method call (alpha beta or minimax) should happen in
-            # here in order to avoid timeout. The try/except block will
-            # automatically catch the exception raised by the search method
-            # when the timer gets close to expiring
+            # The try/except block will automatically catch the exception
+            # raised when the timer is about to expire.
+            return self.minimax(game, self.search_depth)
 
-            # TODO: Determine the deepest fully explored depth of the Graph and start ID with this depth.
-
-            log('Starting search ...')
-            if self.iterative:
-                while self.time_left() > self.TIMER_THRESHOLD:
-                    depth += 1
-                    log('Beginning iterative deepening with depth {}'.format(depth))
-                    v, m = self.search(game, depth=depth, maximizing_player=True)
-                    if v > best_value:
-                        best_value, best_move = v, m
-            else:
-                depth = self.search_depth
-                best_value, best_move = self.search(game, depth=depth, maximizing_player=True)
-
-        except Timeout:
-            # TODO: Handle any actions required at timeout, if necessary
-            pass
-        finally:
-            log('Timeout. Reached depth {} in move {}'.format(depth, game.move_count))
+        except SearchTimeout:
+            pass  # Handle any actions required after timeout as needed
 
         # Return the best move from the last completed search iteration
-        return best_move
+        return -1, -1
 
-    @staticmethod
-    def move_branches(game: Board) -> Iterable[Tuple[Position, Board]]:
-        """
-        Determines the legal moves in the current state, creates branches and yields them.
+    def minimax(self, game, depth):
+        """Implement depth-limited minimax search algorithm as described in
+        the lectures.
 
-        Parameters
-        ----------
-        game : isolation.Board
-            An instance of the Isolation game `Board` class representing the
-            current game state
+        This should be a modified version of MINIMAX-DECISION in the AIMA text.
+        https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
 
-        Returns
-        -------
-        Iterable[Position, Board]
-            The moves and their respective branch of the board.
-        """
-        for m in game.get_legal_moves(game.active_player):
-            yield m, game.forecast_move(m)
-
-    def minimax(self, game: Board, depth: int, maximizing_player: bool=True) -> CandidateMove:
-        """Implement the minimax search algorithm as described in the lectures.
+        **********************************************************************
+            You MAY add additional methods to this class, or define helper
+                 functions to implement the required functionality.
+        **********************************************************************
 
         Parameters
         ----------
@@ -621,65 +259,154 @@ class CustomPlayer:
             Depth is an integer representing the maximum number of plies to
             search in the game tree before aborting
 
-        maximizing_player : bool
-            Flag indicating whether the current search depth corresponds to a
-            maximizing layer (True) or a minimizing layer (False)
-
         Returns
         -------
-        float
-            The score for the current search branch
-
-        tuple(int, int)
-            The best move for the current branch; (-1, -1) for no legal moves
+        (int, int)
+            The board coordinates of the best move found in the current search;
+            (-1, -1) if there are no legal moves
 
         Notes
         -----
             (1) You MUST use the `self.score()` method for board evaluation
-                to pass the project unit tests; you cannot call any other
-                evaluation function directly.
+                to pass the project tests; you cannot call any other evaluation
+                function directly.
+
+            (2) If you use any helper functions (e.g., as shown in the AIMA
+                pseudocode) then you must copy the timer check into the top of
+                each helper function or else your agent will timeout during
+                testing.
         """
         if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
+            raise SearchTimeout()
 
-        # TODO: Implement as queue
+        _, best_move = self._minimax(game, depth)
+        return best_move or (-1, -1)
 
-        # Fetch the current node.
-        current_node = self.get_current_node(game, depth)
+    def _minimax(self, game, depth, maximizing_player: bool=True):
+        """Implement depth-limited minimax search algorithm as described in
+        the lectures.
 
-        # Debugging output
-        log(str(current_node))
+        This should be a modified version of MINIMAX-DECISION in the AIMA text.
+        https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
 
-        # Termination criterion.
-        if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
-            score = self.score(game, game.active_player if maximizing_player else game.inactive_player)
-            current_node.update_score(score)
-            return score, None
+        **********************************************************************
+            You MAY add additional methods to this class, or define helper
+                 functions to implement the required functionality.
+        **********************************************************************
 
-        # Explore the children
-        best_value, best_move = current_node.score, None
-        try:
-            for move, branch in current_node.explore_child_boards():
-                # TODO: Keep track of the explored depth along this branch. If in cache, don't explore if deep enough.
-                v, m = self.minimax(branch, depth - 1, maximizing_player=not maximizing_player)
-                if best_move is None:
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        (int, int)
+            The board coordinates of the best move found in the current search;
+            (-1, -1) if there are no legal moves
+
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project tests; you cannot call any other evaluation
+                function directly.
+
+            (2) If you use any helper functions (e.g., as shown in the AIMA
+                pseudocode) then you must copy the timer check into the top of
+                each helper function or else your agent will timeout during
+                testing.
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player if maximizing_player else game.inactive_player), None
+
+        # The infinities ensure that the first result always initializes the fields.
+        best_value = 0
+        best_move = None
+
+        for move, branch in move_branches(game):
+            v, m = self._minimax(branch, depth - 1, maximizing_player=not maximizing_player)
+            if best_move is None:
+                best_value, best_move = v, move
+            elif maximizing_player:
+                if v > best_value:
                     best_value, best_move = v, move
-                if maximizing_player:
-                    if v > best_value:
-                        best_value, best_move = v, move
-                else:
-                    if v < best_value:
-                        best_value, best_move = v, move
-        finally:
-            if best_move is not None:
-                current_node.update_score(best_value)
-
+            else:
+                if v < best_value:
+                    best_value, best_move = v, move
         return best_value, best_move
 
-    def alphabeta(self, game: Board, depth: int, alpha: float=float("-inf"), beta: float=float("inf"),
-                  maximizing_player: bool=True) -> CandidateMove:
-        """Implement minimax search with alpha-beta pruning as described in the
-        lectures.
+
+class AlphaBetaPlayer(IsolationPlayer):
+    """Game-playing agent that chooses a move using iterative deepening minimax
+    search with alpha-beta pruning. You must finish and test this player to
+    make sure it returns a good move before the search time limit expires.
+    """
+
+    def get_move(self, game, time_left):
+        """Search for the best move from the available legal moves and return a
+        result before the time limit expires.
+
+        Modify the get_move() method from the MinimaxPlayer class to implement
+        iterative deepening search instead of fixed-depth search.
+
+        **********************************************************************
+        NOTE: If time_left() < 0 when this function returns, the agent will
+              forfeit the game due to timeout. You must return _before_ the
+              timer reaches 0.
+        **********************************************************************
+
+        Parameters
+        ----------
+        game : `isolation.Board`
+            An instance of `isolation.Board` encoding the current state of the
+            game (e.g., player locations and blocked cells).
+
+        time_left : callable
+            A function that returns the number of milliseconds left in the
+            current turn. Returning with any less than 0 ms remaining forfeits
+            the game.
+
+        Returns
+        -------
+        (int, int)
+            Board coordinates corresponding to a legal move; may return
+            (-1, -1) if there are no available legal moves.
+        """
+        self.time_left = time_left
+
+        best_move = None
+        try:
+            depth = 0
+            while True:
+                depth += 1
+                best_move = self.alphabeta(game, depth=depth)
+        except SearchTimeout:
+            # Handle any actions required at timeout, if necessary
+            pass
+
+        # Return the best move from the last completed search iteration
+        return best_move or (-1, -1)
+
+    def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf")):
+        """Implement depth-limited minimax search with alpha-beta pruning as
+        described in the lectures.
+
+        This should be a modified version of ALPHA-BETA-SEARCH in the AIMA text
+        https://github.com/aimacode/aima-pseudocode/blob/master/md/Alpha-Beta-Search.md
+
+        **********************************************************************
+            You MAY add additional methods to this class, or define helper
+                 functions to implement the required functionality.
+        **********************************************************************
 
         Parameters
         ----------
@@ -697,96 +424,101 @@ class CustomPlayer:
         beta : float
             Beta limits the upper bound of search on maximizing layers
 
-        maximizing_player : bool
-            Flag indicating whether the current search depth corresponds to a
-            maximizing layer (True) or a minimizing layer (False)
-
         Returns
         -------
-        float
-            The score for the current search branch
-
-        tuple(int, int)
-            The best move for the current branch; (-1, -1) for no legal moves
+        (int, int)
+            The board coordinates of the best move found in the current search;
+            (-1, -1) if there are no legal moves
 
         Notes
         -----
             (1) You MUST use the `self.score()` method for board evaluation
-                to pass the project unit tests; you cannot call any other
-                evaluation function directly.
+                to pass the project tests; you cannot call any other evaluation
+                function directly.
+
+            (2) If you use any helper functions (e.g., as shown in the AIMA
+                pseudocode) then you must copy the timer check into the top of
+                each helper function or else your agent will timeout during
+                testing.
         """
-        assert self.time_left is not None
         if self.time_left() < self.TIMER_THRESHOLD:
-            raise Timeout()
+            raise SearchTimeout()
 
-        # TODO: Implement as queue
+        _, best_move = self._alphabeta(game, depth, alpha, beta)
+        return best_move or (-1, -1)
 
-        # Fetch the current node.
-        current_node = self.get_current_node(game, depth)
+    def _alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player: bool=True):
+        """Implement depth-limited minimax search with alpha-beta pruning as
+        described in the lectures.
 
-        # Cached termination criterion.
-        # TODO: for some reason, this doesn't work.
-        # Checking for isinf(s) works only when the opponent plays optimally.
-        # if current_node.score == POSITIVE_INFINITY:
-        #     assert any(s.bottom.score == POSITIVE_INFINITY for s in current_node._out_edges) or len(current_node._out_edges) == 0
-        #     return current_node.score, None
+        This should be a modified version of ALPHA-BETA-SEARCH in the AIMA text
+        https://github.com/aimacode/aima-pseudocode/blob/master/md/Alpha-Beta-Search.md
 
-        # Termination criterion.
-        if depth == 0 or game.is_winner(game.active_player) or game.is_loser(game.active_player):
-            score = self.score(game, game.active_player if maximizing_player else game.inactive_player)
-            current_node.update_score(score)
-            return score, None
+        **********************************************************************
+            You MAY add additional methods to this class, or define helper
+                 functions to implement the required functionality.
+        **********************************************************************
 
-        # Explore the children.
-        best_value, best_move = current_node.score, None
-        try:
-            for move, branch in current_node.explore_child_boards():
-                v, m = self.alphabeta(branch, depth-1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
-                if best_move is None:
-                    best_value, best_move = v, move
-                if maximizing_player:
-                    if v > best_value:
-                        best_value, best_move = v, move
-                    alpha = max(alpha, v)  # raise the lower bound
-                    if v >= beta:  # TODO: add explanatory comment
-                        break
-                else:
-                    if v < best_value:
-                        best_value, best_move = v, move
-                    beta = min(beta, v)  # lower the upper bound
-                    if v <= alpha:  # TODO: add explanatory comment
-                        break
-        finally:
-            if best_move is not None:
-                current_node.update_score(best_value)
-
-        return best_value, best_move
-
-    def get_current_node(self, game: Board, depth: int) -> GraphNode:
-        """Obtains the current graph node.
-        
         Parameters
         ----------
-        game : Board
-            The current game state.
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
         depth : int
-            The current depth.
-            
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        alpha : float
+            Alpha limits the lower bound of search on minimizing layers
+
+        beta : float
+            Beta limits the upper bound of search on maximizing layers
+
         Returns
         -------
-        GraphNode
-            The current graph node.
-        """
-        # Normally, the node must not be None at this point, but
-        # there are two ways this might fail:
-        # 1) The unit tests provided by Udacity call this method directly, so
-        #    the initialization from the get_move method is missing.
-        # 2) The opponent could have taken a move we did not explore yet.
-        current_node = self.find_node(game)
-        if current_node is None:
-            assert self.is_unit_test, 'This assumption should only hold in unit tests but failed in move {}, depth {} ({}).'.format(
-                game.move_count, depth, self.score)
-            self.move_registry.clear()
-            current_node = GraphNode(self.move_registry, branch=game, score=0, age=game.move_count)
+        (int, int)
+            The board coordinates of the best move found in the current search;
+            (-1, -1) if there are no legal moves
 
-        return current_node
+        Notes
+        -----
+            (1) You MUST use the `self.score()` method for board evaluation
+                to pass the project tests; you cannot call any other evaluation
+                function directly.
+
+            (2) If you use any helper functions (e.g., as shown in the AIMA
+                pseudocode) then you must copy the timer check into the top of
+                each helper function or else your agent will timeout during
+                testing.
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player if maximizing_player else game.inactive_player), None
+
+        best_value = 0
+        best_move = None
+
+        for move, branch in move_branches(game):
+            v, m = self._alphabeta(branch, depth - 1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
+            if best_move is None:
+                best_value, best_move = v, move
+
+            if maximizing_player:
+                # If the value is better, store it and the move that led to it.
+                if v > best_value:
+                    best_value, best_move = v, move
+                alpha = max(alpha, v)  # raise the lower bound
+                if v >= beta:  # TODO: add explanatory comment
+                    break
+            else:
+                # If the value is better, store it and the move that led to it.
+                if v < best_value:
+                    best_value, best_move = v, move
+                beta = min(beta, v)  # lower the upper bound
+                if v <= alpha:  # TODO: add explanatory comment
+                    break
+        return best_value, best_move

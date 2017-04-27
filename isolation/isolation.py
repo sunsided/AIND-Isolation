@@ -169,7 +169,7 @@ class Board(object):
                 "Invalid player in get_player_location: {}".format(player))
         w = idx // self.height
         h = idx % self.height
-        return h, w
+        return (h, w)
 
     def get_legal_moves(self, player=None):
         """Return the list of all legal moves for the specified player.
@@ -322,9 +322,8 @@ class Board(object):
             game_copy = self.copy()
 
             move_start = time_millis()
-            time_left = lambda: time_limit - (time_millis() - move_start)
-            curr_move = self._active_player.get_move(
-                game_copy, legal_player_moves, time_left)
+            time_left = lambda : time_limit - (time_millis() - move_start)
+            curr_move = self._active_player.get_move(game_copy, time_left)
             move_end = time_left()
 
             if curr_move is None:
