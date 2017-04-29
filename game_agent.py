@@ -234,7 +234,8 @@ class MinimaxPlayer(IsolationPlayer):
         except SearchTimeout:
             pass  # Handle any actions required after timeout as needed
 
-        # Return the best move from the last completed search iteration
+        # Return the best move from the last completed search iteration.
+        # Note that this only applies to iterative deepening approaches.
         return -1, -1
 
     def minimax(self, game, depth):
@@ -279,20 +280,15 @@ class MinimaxPlayer(IsolationPlayer):
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
 
-        _, best_move = self._minimax(game, depth)
+        # Note that this step is technically identical to the _minimax_max()
+        # function, but additionally keeps track of the move to take eventually.
+        best_value, best_move = max(((self._minimax_min(branch, depth - 1), move)
+                                     for move, branch in move_branches(game)),
+                                    key=lambda t: t[0])
         return best_move or (-1, -1)
 
-    def _minimax(self, game, depth, maximizing_player: bool=True):
-        """Implement depth-limited minimax search algorithm as described in
-        the lectures.
-
-        This should be a modified version of MINIMAX-DECISION in the AIMA text.
-        https://github.com/aimacode/aima-pseudocode/blob/master/md/Minimax-Decision.md
-
-        **********************************************************************
-            You MAY add additional methods to this class, or define helper
-                 functions to implement the required functionality.
-        **********************************************************************
+    def _minimax_min(self, game, depth):
+        """Implements a depth-limited minimax search step for the min player.
 
         Parameters
         ----------
@@ -306,43 +302,46 @@ class MinimaxPlayer(IsolationPlayer):
 
         Returns
         -------
-        (int, int)
-            The board coordinates of the best move found in the current search;
-            (-1, -1) if there are no legal moves
-
-        Notes
-        -----
-            (1) You MUST use the `self.score()` method for board evaluation
-                to pass the project tests; you cannot call any other evaluation
-                function directly.
-
-            (2) If you use any helper functions (e.g., as shown in the AIMA
-                pseudocode) then you must copy the timer check into the top of
-                each helper function or else your agent will timeout during
-                testing.
+        float
+            The lowest score (heuristic) possible in this state.
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
 
         player = game.active_player
         if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, player if maximizing_player else game.inactive_player), None
+            return self.score(game, game.get_opponent(player))
 
-        # The infinities ensure that the first result always initializes the fields.
-        best_value = 0
-        best_move = None
+        return min(self._minimax_max(branch, depth - 1)
+                   for move, branch in move_branches(game))
 
-        for move, branch in move_branches(game):
-            v, m = self._minimax(branch, depth - 1, maximizing_player=not maximizing_player)
-            if best_move is None:
-                best_value, best_move = v, move
-            elif maximizing_player:
-                if v > best_value:
-                    best_value, best_move = v, move
-            else:
-                if v < best_value:
-                    best_value, best_move = v, move
-        return best_value, best_move
+    def _minimax_max(self, game, depth):
+        """Implements a depth-limited minimax search step for the max player.
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        float
+            The highest score (heuristic) possible in this state.
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player)
+
+        return max(self._minimax_min(branch, depth - 1)
+                   for move, branch in move_branches(game))
 
 
 class AlphaBetaPlayer(IsolationPlayer):
@@ -444,20 +443,11 @@ class AlphaBetaPlayer(IsolationPlayer):
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
 
-        _, best_move = self._alphabeta(game, depth, alpha, beta)
-        return best_move or (-1, -1)
+        best_value, best_move = self._alphabeta_max(game, depth , alpha=alpha, beta=beta)
+        return best_move
 
-    def _alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf"), maximizing_player: bool=True):
-        """Implement depth-limited minimax search with alpha-beta pruning as
-        described in the lectures.
-
-        This should be a modified version of ALPHA-BETA-SEARCH in the AIMA text
-        https://github.com/aimacode/aima-pseudocode/blob/master/md/Alpha-Beta-Search.md
-
-        **********************************************************************
-            You MAY add additional methods to this class, or define helper
-                 functions to implement the required functionality.
-        **********************************************************************
+    def _alphabeta_min(self, game, depth, alpha, beta):
+        """Implements a depth-limited alpha-beta pruned minimax search step for the min player.
 
         Parameters
         ----------
@@ -468,7 +458,7 @@ class AlphaBetaPlayer(IsolationPlayer):
         depth : int
             Depth is an integer representing the maximum number of plies to
             search in the game tree before aborting
-
+            
         alpha : float
             Alpha limits the lower bound of search on minimizing layers
 
@@ -477,48 +467,79 @@ class AlphaBetaPlayer(IsolationPlayer):
 
         Returns
         -------
-        (int, int)
-            The board coordinates of the best move found in the current search;
-            (-1, -1) if there are no legal moves
-
-        Notes
-        -----
-            (1) You MUST use the `self.score()` method for board evaluation
-                to pass the project tests; you cannot call any other evaluation
-                function directly.
-
-            (2) If you use any helper functions (e.g., as shown in the AIMA
-                pseudocode) then you must copy the timer check into the top of
-                each helper function or else your agent will timeout during
-                testing.
+        float
+            The lowest score (heuristic) possible in this state.
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
 
         player = game.active_player
         if depth == 0 or game.is_winner(player) or game.is_loser(player):
-            return self.score(game, player if maximizing_player else game.inactive_player), None
+            return self.score(game, game.get_opponent(player)), None
 
-        best_value = 0
-        best_move = None
-
+        best_value, best_move = None, None
         for move, branch in move_branches(game):
-            v, m = self._alphabeta(branch, depth - 1, alpha=alpha, beta=beta, maximizing_player=not maximizing_player)
-            if best_move is None:
+            v, m = self._alphabeta_max(branch, depth - 1, alpha=alpha, beta=beta)
+            if best_value is None or v < best_value:
                 best_value, best_move = v, move
 
-            if maximizing_player:
-                # If the value is better, store it and the move that led to it.
-                if v > best_value:
-                    best_value, best_move = v, move
-                alpha = max(alpha, v)  # raise the lower bound
-                if v >= beta:  # TODO: add explanatory comment
-                    break
-            else:
-                # If the value is better, store it and the move that led to it.
-                if v < best_value:
-                    best_value, best_move = v, move
-                beta = min(beta, v)  # lower the upper bound
-                if v <= alpha:  # TODO: add explanatory comment
-                    break
+            # If the value is lower than the current lower bound available to
+            # the calling max player, we know that this branch will never be taken
+            # (since max will at least select the known branch that created the
+            # higher lower bound). Because of that, we can stop searching.
+            if v <= alpha:
+                break
+
+            # lower the upper bound
+            beta = min(beta, v)
+
+        return best_value, best_move
+
+    def _alphabeta_max(self, game, depth, alpha, beta):
+        """Implements a depth-limited alpha-beta pruned minimax search step for the max player.
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+            
+        alpha : float
+            Alpha limits the lower bound of search on minimizing layers
+
+        beta : float
+            Beta limits the upper bound of search on maximizing layers
+
+        Returns
+        -------
+        float
+            The highest score (heuristic) possible in this state.
+        """
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, player), None
+
+        best_value, best_move = None, None
+        for move, branch in move_branches(game):
+            v, m = self._alphabeta_min(branch, depth - 1, alpha=alpha, beta=beta)
+            if best_value is None or v > best_value:
+                best_value, best_move = v, move
+
+            # If the value is higher than the current upper bound available to
+            # the calling min player, we know that this branch will never be taken
+            # (since min will at least select the known branch that created the
+            # lower upper bound). Because of that, we can stop searching.
+            if v >= beta:
+                break
+
+            # raise the lower bound
+            alpha = max(alpha, v)
+
         return best_value, best_move
