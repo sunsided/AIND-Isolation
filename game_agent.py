@@ -13,12 +13,13 @@ class SearchTimeout(Exception):
     pass
 
 
-def custom_score(game, player):
+def custom_score_3(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
-
-    This should be the best heuristic function for your project submission.
-
+    
+    This method attempts to find moves that aggressively minimizes
+    the opponent's number of choices for future moves.
+    
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
@@ -45,14 +46,19 @@ def custom_score(game, player):
     if opp_moves == 0:
         return POSITIVE_INFINITY
 
-    opp_future_moves = len(__get_moves_2(game, game.get_opponent(player)))
+    opp_future_moves = len(move_lookahead(game, game.get_opponent(player)))
     return float(own_moves - 2*opp_future_moves)
 
 
 def custom_score_2(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
-
+    
+    This method attempts to limit the opponent's future move options
+    while simultaneously trying to keep reduce distance.
+    The idea is that by following the enemy, we keep open space in our
+    back but limit its options.
+    
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
@@ -83,13 +89,17 @@ def custom_score_2(game, player):
     p2 = game.get_player_location(game.get_opponent(player))
     dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
 
-    return float(own_moves - 2 * opp_moves - dist)
+    # Stay away three fields, which is the Manhattan distance of
+    # one move. Ideally, this counter's a future move.
+    return float(own_moves - opp_moves - (dist - 3))
 
 
-def custom_score_3(game, player):
+def custom_score(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
 
+    This should be the best heuristic function for your project submission.
+    
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
@@ -117,29 +127,53 @@ def custom_score_3(game, player):
         return POSITIVE_INFINITY
 
     p1 = game.get_player_location(game.active_player)
-    p2 = game.get_player_location(game.get_opponent(player))
-    dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+    p2 = game.width/2, game.height/2
+    center_dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+    weighted_dist = 4 * center_dist / game.move_count
 
-    opp_future_moves = len(__get_moves_2(game, game.get_opponent(player)))
-    return float(own_moves - 2 * opp_future_moves - dist)
+    opp_future_moves = move_lookahead_counter(game, game.active_player)
+    own_future_moves = move_lookahead_counter(game, game.get_opponent(game.active_player))
+
+    return float(own_moves + own_future_moves
+                 - opp_moves - opp_future_moves
+                 - weighted_dist)
 
 
-def __get_moves_2(game, player):
-    """Generate the list of possible moves for an L-shaped motion (like a
-    knight in chess).
+def move_lookahead(game, player, loc=None):
+    """Generate the list of possible moves for the player in his next turn
+    assuming the opponent doesn't move.
     """
+    loc = loc or game.get_player_location(player)
 
-    loc = game.get_player_location(player)
-
+    # Obtain future moves based on each currently possible move.
     directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
                   (1, -2), (1, 2), (2, -1), (2, 1)]
-    directions = set(((r + dr, c + dc) for dr, dc in directions for r, c in directions))
+    directions = set(((cr + fr, cf + fc)
+                      for fr, fc in directions    # future
+                      for cr, cf in directions))  # current
 
+    # Filter out invalid moves.
     r, c = loc
     valid_moves = [(r + dr, c + dc) for dr, dc in directions
                    if game.move_is_legal((r + dr, c + dc))]
-    random.shuffle(valid_moves)
     return set(valid_moves)
+
+
+def move_lookahead_counter(game, player):
+    """Obtain the number of moves an opponent could make in two turns from now,
+    after removing each move that could be prevented by the player before.
+    """
+    # obtain our moves
+    own_moves = set(game.get_legal_moves(player))
+    # obtain the opponent's move, but removing all moves we could counter
+    opp_moves = set(game.get_legal_moves(game.get_opponent(player))) - own_moves
+    # project our moves, but remove everything the opponent could counter
+    own_moves = set((m for m in move_lookahead(game, None, loc=loc))
+                    for loc in own_moves) - opp_moves
+    # repeat for the opponent
+    opp_moves = set((m for m in move_lookahead(game, None, loc=loc))
+                    for loc in opp_moves) - own_moves
+    return len(opp_moves)
 
 
 def move_branches(game):
@@ -279,6 +313,10 @@ class MinimaxPlayer(IsolationPlayer):
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
+
+        player = game.active_player
+        if depth == 0 or game.is_winner(player) or game.is_loser(player):
+            return self.score(game, game.get_opponent(player))
 
         # Note that this step is technically identical to the _minimax_max()
         # function, but additionally keeps track of the move to take eventually.

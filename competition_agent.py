@@ -232,7 +232,7 @@ class GraphNode:
         """Marks this node as tainted, indicating that the outgoing edges need sorting."""
         self._children_need_sorting = True
 
-    def set_age_and_depth(self, age: int, depth: int) -> int:
+    def set_age_and_depth(self, age: int, depth: int) -> Tuple[int, int]:
         """Updates the age and depth of this node and its descendants. This is triggered by a tree root change.
 
         We have to keep in mind that this is a potentially cyclic graph, so deep nodes may point to a node
@@ -247,14 +247,16 @@ class GraphNode:
 
         Returns
         -------
-        int
-            The previous age.
+        (int, int)
+            The previous age and the deepest explored depth.
         """
         previous_age, self.age = self.age, age
         self.depth = depth
+        min_depth = depth
         for edge in self._out_edges:
-            edge.bottom.set_age_and_depth(age, depth + 1)
-        return previous_age
+            _, bottom_min_depth = edge.bottom.set_age_and_depth(age, depth + 1)
+            min_depth = min(min_depth, bottom_min_depth)
+        return previous_age, min_depth
 
     @property
     def has_children(self) -> bool:
@@ -378,7 +380,7 @@ class GraphNode:
         self._out_edges = sorted(self._out_edges, key=lambda e: -e.bottom.score, reverse=False)
         self._children_need_sorting = False
 
-    def make_root(self, new_age: int):
+    def make_root(self, new_age: int) -> int:
         """Makes this node the new root of the graph, purging its ancestors and all unrelated nodes.
 
         Parameters
@@ -389,11 +391,12 @@ class GraphNode:
         """
         # Shifting the tree depth, making this node depth zero; also
         # painting our children with the new age masks them from purging.
-        threshold_age = self.set_age_and_depth(new_age, 0)
+        threshold_age, deepest_depth = self.set_age_and_depth(new_age, 0)
         # Delete all ancestors, siblings and their children, but not OUR children.
         while len(self._in_edges) > 0:
             edge = self._in_edges.pop()  # type: GraphEdge
             edge.top.purge(threshold_age)
+        return deepest_depth
 
     def purge(self, threshold_age: int):
         """Removes this node from the graph, while also purging its ancestors and children.
@@ -500,14 +503,14 @@ class CustomPlayer:
         """
         self.time_left = time_left
 
+        depth = 0
+        best_move = None
+
         self.tree = self.find_node(game)
         if self.tree is None:
             self.tree = GraphNode(self.move_registry, branch=game, score=0.0, age=game.move_count, depth=0)
         else:
-            self.tree.make_root(game.move_count)
-
-        best_move = None
-        depth = 0
+            depth = self.tree.make_root(game.move_count)
 
         try:
             # The search method call (alpha beta or minimax) should happen in
