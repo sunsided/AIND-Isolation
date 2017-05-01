@@ -92,7 +92,7 @@ def custom_score_3(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return score_counter_opponent(game, player)
+    return score_opponent_moves(game, player)
 
 
 def score_counter_opponent(game, player):
@@ -197,6 +197,22 @@ def score_opponent_moves(game, player):
 
     opp_future_moves = len(move_lookahead(game, game.get_opponent(player)))
     return float(own_moves - 2 * opp_future_moves)
+
+
+def score_own_moves(game, player):
+    """Returns a score relative to the difference in move opportunities
+    and the opponent's future move opportunities."""
+    own_moves = len(game.get_legal_moves(player))
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
+    own_future_moves = len(move_lookahead(game, player))
+    opp_future_moves = len(move_lookahead(game, game.get_opponent(player)))
+    return float(2 * own_future_moves - opp_future_moves)
 
 
 def l1_dist(p1, p2):
