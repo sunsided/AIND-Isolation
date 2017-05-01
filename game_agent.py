@@ -13,13 +13,12 @@ class SearchTimeout(Exception):
     pass
 
 
-def custom_score_3(game, player):
+def custom_score(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
-    
-    This method attempts to find moves that aggressively minimizes
-    the opponent's number of choices for future moves.
-    
+
+    This should be the best heuristic function for your project submission.
+
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
 
@@ -38,19 +37,37 @@ def custom_score_3(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    own_moves = len(game.get_legal_moves(player))
-    if own_moves == 0:
-        return NEGATIVE_INFINITY
-
-    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
-    if opp_moves == 0:
-        return POSITIVE_INFINITY
-
-    opp_future_moves = len(move_lookahead(game, game.get_opponent(player)))
-    return float(own_moves - 2*opp_future_moves)
+    return score_diff_opportunities_pow(game, player)
 
 
 def custom_score_2(game, player):
+    """Calculate the heuristic value of a game state from the point of view
+    of the given player.
+
+    This should be the best heuristic function for your project submission.
+
+    Note: this function should be called from within a Player instance as
+    `self.score()` -- you should not need to call this function directly.
+
+    Parameters
+    ----------
+    game : `isolation.Board`
+        An instance of `isolation.Board` encoding the current state of the
+        game (e.g., player locations and blocked cells).
+
+    player : object
+        A player instance in the current game (i.e., an object corresponding to
+        one of the player objects `game.__player_1__` or `game.__player_2__`.)
+
+    Returns
+    -------
+    float
+        The heuristic value of the current game state to the specified player.
+    """
+    return score_diff_opportunities_centered(game, player)
+
+
+def custom_score_3(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
     
@@ -77,6 +94,55 @@ def custom_score_2(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
+    return score_diff_opportunities_hunter(game, player)
+
+
+def score_diff_opportunities_pow(game, player):
+    """Returns a score relative to the difference in move opportunities."""
+    own_moves = len(game.get_legal_moves(player))
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
+    own_future_moves = len(move_lookahead(game, game.active_player))
+    opp_future_moves = len(move_lookahead(game, game.get_opponent(game.active_player)))
+
+    current = own_moves - opp_moves
+    future = own_future_moves - opp_future_moves
+
+    return float((1.01**current) * (1.5**future))
+
+
+def score_diff_opportunities_centered(game, player):
+    """Returns a score relative to the difference in move opportunities,
+    while drawing the player to the center of the board."""
+    own_moves = len(game.get_legal_moves(player))
+    if own_moves == 0:
+        return NEGATIVE_INFINITY
+
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+    if opp_moves == 0:
+        return POSITIVE_INFINITY
+
+    p1 = game.get_player_location(game.active_player)
+    p2 = game.width / 2, game.height / 2
+    center_dist = l1_dist(p1, p2)
+    weighted_dist = center_dist / (game.move_count + 2)
+
+    opp_future_moves = move_lookahead_count(game, game.active_player)
+    own_future_moves = move_lookahead_count(game, game.get_opponent(game.active_player))
+
+    return float(own_moves + 2 * own_future_moves
+                 - opp_moves - 2 * opp_future_moves
+                 - weighted_dist)
+
+
+def score_diff_opportunities_hunter(game, player):
+    """Returns a score relative to the difference in move opportunities,
+    while following the opponent in a distance."""
     own_moves = len(game.get_legal_moves(player))
     if own_moves == 0:
         return NEGATIVE_INFINITY
@@ -87,37 +153,16 @@ def custom_score_2(game, player):
 
     p1 = game.get_player_location(game.active_player)
     p2 = game.get_player_location(game.get_opponent(player))
-    dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+    dist = l1_dist(p1, p2)
 
     # Stay away three fields, which is the Manhattan distance of
     # one move. Ideally, this counter's a future move.
     return float(own_moves - opp_moves - (dist - 3))
 
 
-def custom_score(game, player):
-    """Calculate the heuristic value of a game state from the point of view
-    of the given player.
-
-    This should be the best heuristic function for your project submission.
-    
-    Note: this function should be called from within a Player instance as
-    `self.score()` -- you should not need to call this function directly.
-
-    Parameters
-    ----------
-    game : `isolation.Board`
-        An instance of `isolation.Board` encoding the current state of the
-        game (e.g., player locations and blocked cells).
-
-    player : object
-        A player instance in the current game (i.e., an object corresponding to
-        one of the player objects `game.__player_1__` or `game.__player_2__`.)
-
-    Returns
-    -------
-    float
-        The heuristic value of the current game state to the specified player.
-    """
+def score_opponent_moves(game, player):
+    """Returns a score relative to the difference in move opportunities
+    and the opponent's future move opportunities."""
     own_moves = len(game.get_legal_moves(player))
     if own_moves == 0:
         return NEGATIVE_INFINITY
@@ -126,17 +171,18 @@ def custom_score(game, player):
     if opp_moves == 0:
         return POSITIVE_INFINITY
 
-    p1 = game.get_player_location(game.active_player)
-    p2 = game.width/2, game.height/2
-    center_dist = abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
-    weighted_dist = 4 * center_dist / game.move_count
+    opp_future_moves = len(move_lookahead(game, game.get_opponent(player)))
+    return float(own_moves - 2 * opp_future_moves)
 
-    opp_future_moves = move_lookahead_counter(game, game.active_player)
-    own_future_moves = move_lookahead_counter(game, game.get_opponent(game.active_player))
 
-    return float(own_moves + own_future_moves
-                 - opp_moves - opp_future_moves
-                 - weighted_dist)
+def l1_dist(p1, p2):
+    """Returns the L1 (Manhattan) distance between two points."""
+    return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+
+
+def l2s_dist(p1, p2):
+    """Returns the squared L2 (sq. Euclidean) distance between two points."""
+    return (p1[0] - p2[0]**2) + (p1[1] - p2[1])**2
 
 
 def move_lookahead(game, player, loc=None):
@@ -159,7 +205,7 @@ def move_lookahead(game, player, loc=None):
     return set(valid_moves)
 
 
-def move_lookahead_counter(game, player):
+def move_lookahead_count(game, player):
     """Obtain the number of moves an opponent could make in two turns from now,
     after removing each move that could be prevented by the player before.
     """
