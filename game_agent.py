@@ -37,14 +37,12 @@ def custom_score(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return score_diff_opportunities_pow(game, player)
+    return score_diff_opportunities_hunter(game, player)
 
 
 def custom_score_2(game, player):
     """Calculate the heuristic value of a game state from the point of view
     of the given player.
-
-    This should be the best heuristic function for your project submission.
 
     Note: this function should be called from within a Player instance as
     `self.score()` -- you should not need to call this function directly.
@@ -64,7 +62,7 @@ def custom_score_2(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return score_diff_opportunities_centered(game, player)
+    return score_diff_opportunities_pow(game, player)
 
 
 def custom_score_3(game, player):
@@ -94,7 +92,33 @@ def custom_score_3(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return score_diff_opportunities_hunter(game, player)
+    return score_counter_opponent(game, player)
+
+
+def score_counter_opponent(game, player):
+    """For each future move of the opponent that we can counter,
+    select the one the opponent would benefit from."""
+    own_moves = game.get_legal_moves(player)
+    if len(own_moves) == 0:
+        return NEGATIVE_INFINITY
+
+    opponent = game.get_opponent(player)
+    opp_moves = game.get_legal_moves(opponent)
+    if len(opp_moves) == 0:
+        return POSITIVE_INFINITY
+
+    loc = game.get_player_location(player)
+    score = len(move_lookahead(game, None, loc=loc))
+    if loc in get_moves_unfiltered(game, opponent):
+        # the number of moves the opponent could take
+        # from here is the same as the number of moves
+        # we can take right now.
+        score += len(own_moves)
+
+    # For global comparison we're still interested
+    # in minimizing the opponent's number of moves,
+    # so we take them into account here as well.
+    return score - len(opp_moves)
 
 
 def score_diff_opportunities_pow(game, player):
@@ -132,8 +156,8 @@ def score_diff_opportunities_centered(game, player):
     center_dist = l1_dist(p1, p2)
     weighted_dist = center_dist / (game.move_count + 2)
 
-    opp_future_moves = move_lookahead_count(game, game.active_player)
-    own_future_moves = move_lookahead_count(game, game.get_opponent(game.active_player))
+    opp_future_moves = move_lookahead_countered(game, game.active_player)
+    own_future_moves = move_lookahead_countered(game, game.get_opponent(game.active_player))
 
     return float(own_moves + 2 * own_future_moves
                  - opp_moves - 2 * opp_future_moves
@@ -205,7 +229,45 @@ def move_lookahead(game, player, loc=None):
     return set(valid_moves)
 
 
-def move_lookahead_count(game, player):
+def get_moves(game, player, loc=None):
+    """Generate the list of possible moves for an L-shaped motion (like a
+    knight in chess).
+    """
+    loc = loc or game.get_player_location(player)
+
+    if loc is None:
+        return game.get_blank_spaces()
+
+    r, c = loc
+    directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+                  (1, -2), (1, 2), (2, -1), (2, 1)]
+    valid_moves = [(r + dr, c + dc) for dr, dc in directions
+                   if game.move_is_legal((r + dr, c + dc))]
+    return valid_moves
+
+
+def get_moves_unfiltered(game, player, loc=None):
+    """Generate the list of possible moves for an L-shaped motion (like a
+    knight in chess).
+    """
+    loc = loc or game.get_player_location(player)
+
+    if loc is None:
+        return game.get_blank_spaces()
+
+    r, c = loc
+    directions = [(-2, -1), (-2, 1), (-1, -2), (-1, 2),
+                  (1, -2), (1, 2), (2, -1), (2, 1)]
+    return [(r + dr, c + dc) for dr, dc in directions]
+    return [(r + dr, c + dc) for dr, dc in directions]
+
+
+def print_board(self):
+    """DEPRECATED - use Board.to_string()"""
+    return self.to_string()
+
+
+def move_lookahead_countered(game, player):
     """Obtain the number of moves an opponent could make in two turns from now,
     after removing each move that could be prevented by the player before.
     """
